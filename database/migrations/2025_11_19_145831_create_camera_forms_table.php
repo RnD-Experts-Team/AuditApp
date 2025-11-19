@@ -13,10 +13,10 @@ return new class extends Migration
     {
         Schema::create('camera_forms', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('user_id')->nullable()->constrained('users')->onDelete('cascade');
-            $table->foreignId('entity_id')->constrained('entities')->onDelete('cascade');
+            $table->foreignId('user_id')->nullable()->constrained('users')->onDelete('no action');
+            $table->foreignId('entity_id')->constrained('entities')->onDelete('no action');
             $table->foreignId('audit_id')->nullable()->constrained('audits')->onDelete('cascade');
-            $table->foreignId('rating_id')->nullable()->constrained('ratings')->onDelete('cascade');
+            $table->foreignId('rating_id')->nullable()->constrained('ratings')->onDelete('set null');
             $table->text('note')->nullable();
             $table->timestamps();
         });

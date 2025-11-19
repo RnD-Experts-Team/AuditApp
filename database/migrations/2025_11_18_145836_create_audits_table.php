@@ -13,8 +13,8 @@ return new class extends Migration
     {
         Schema::create('audits', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('store_id')->constrained('stores')->onDelete('cascade');
-            $table->foreignId('user_id')->constrained('users')->onDelete('cascade');
+            $table->foreignId('store_id')->constrained('stores')->onDelete('No action');
+            $table->foreignId('user_id')->constrained('users')->onDelete('No action');
             $table->date('date')->nullable();
             $table->timestamps();
         });

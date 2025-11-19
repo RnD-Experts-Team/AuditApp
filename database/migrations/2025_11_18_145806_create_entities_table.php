@@ -12,9 +12,9 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('entities', function (Blueprint $table) {
-             $table->id();
+            $table->id();
             $table->string('entity_label');
-            $table->foreignId('category_id')->constrained('categories')->onDelete('cascade');
+            $table->foreignId('category_id')->nullable()->constrained('categories')->onDelete('set null');
             $table->enum('date_range_type', ['daily', 'weekly']);
             $table->enum('report_type', ['main', 'secondary'])->nullable();
             $table->timestamps();
