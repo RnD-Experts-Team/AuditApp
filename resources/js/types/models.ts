@@ -74,4 +74,9 @@ export interface PaginatedData<T> {
         label: string;
         active: boolean;
     }[];
+
+
+}
+export interface StoreScoreData {
+    final_total_score: number | null;
 }
