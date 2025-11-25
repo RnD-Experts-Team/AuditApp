@@ -11,7 +11,7 @@ use App\Http\Controllers\CameraReportController;
 
 Route::get('/', function () {
     return Inertia::render('welcome', [
-        'canRegister' => Features::enabled(Features::registration()),
+        // 'canRegister' => Features::enabled(Features::registration()),
     ]);
 })->name('home');
 
