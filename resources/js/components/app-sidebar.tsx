@@ -12,8 +12,8 @@ import {
 } from '@/components/ui/sidebar';
 import { dashboard } from '@/routes';
 import { type NavItem } from '@/types';
-import { Link } from '@inertiajs/react';
-import { BookOpen, Folder, LayoutGrid, Camera  ,FolderOpen} from 'lucide-react';
+import { Link, usePage } from '@inertiajs/react';
+import { BookOpen, Folder, LayoutGrid, Camera, FolderOpen } from 'lucide-react';
 import AppLogo from './app-logo';
 
 const mainNavItems: NavItem[] = [
@@ -36,20 +36,31 @@ const mainNavItems: NavItem[] = [
         title: 'Stores',
         href: '/stores',
         icon: LayoutGrid,
+        admin: true,
     },
     {
         title: 'Entities & Categories',
         href: '/entities',
         icon: FolderOpen,
+        admin: true,
     },
-
 ];
 
-const footerNavItems: NavItem[] = [
-
-];
+const footerNavItems: NavItem[] = [];
 
 export function AppSidebar() {
+    const { auth } = usePage().props;
+    const isAdmin = auth.user?.role === 'Admin';
+
+    // Filter nav items based on user role
+    const filteredNavItems = mainNavItems.filter(item => {
+        // If item has admin flag and user is not admin, hide it
+        if ((item as any).admin && !isAdmin) {
+            return false;
+        }
+        return true;
+    });
+
     return (
         <Sidebar collapsible="icon" variant="inset">
             <SidebarHeader>
@@ -65,7 +76,7 @@ export function AppSidebar() {
             </SidebarHeader>
 
             <SidebarContent>
-                <NavMain items={mainNavItems} />
+                <NavMain items={filteredNavItems} />
             </SidebarContent>
 
             <SidebarFooter>

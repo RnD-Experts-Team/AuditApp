@@ -4,13 +4,18 @@ import AuthenticatedLayout from '@/Layouts/app-layout';
 import { PageProps } from '@/types';
 import { CreateUserPageProps, CreateUserFormData } from '@/types/user';
 
-export default function Create({ auth }: PageProps<CreateUserPageProps>) {
-    const { data, setData, post, errors, processing } = useForm<CreateUserFormData>({
+interface CreatePageProps extends PageProps<CreateUserPageProps> {
+    groups: number[];
+}
+
+export default function Create({ auth, groups }: CreatePageProps) {
+    const { data, setData, post, errors, processing } = useForm<CreateUserFormData & { groups: number[] }>({
         name: '',
         email: '',
         role: '',
         password: '',
         password_confirmation: '',
+        groups: [],
     });
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -19,6 +24,16 @@ export default function Create({ auth }: PageProps<CreateUserPageProps>) {
             preserveScroll: true,
         });
     };
+
+    const toggleGroup = (group: number) => {
+        setData('groups',
+            data.groups.includes(group)
+                ? data.groups.filter(g => g !== group)
+                : [...data.groups, group]
+        );
+    };
+
+    const showGroupsField = data.role === 'User';
 
     return (
         <AuthenticatedLayout user={auth.user}>
@@ -86,6 +101,36 @@ export default function Create({ auth }: PageProps<CreateUserPageProps>) {
                                 <p className="text-sm text-destructive">{errors.role}</p>
                             )}
                         </div>
+
+                        {/* Groups - Only show for User role */}
+                        {showGroupsField && (
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium">Assign Groups</label>
+                                <p className="text-xs text-muted-foreground mb-3">
+                                    Select one or more groups this user can access
+                                </p>
+                                {groups.length > 0 ? (
+                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                                        {groups.map((group) => (
+                                            <label key={group} className="flex items-center space-x-2 cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={data.groups.includes(group)}
+                                                    onChange={() => toggleGroup(group)}
+                                                    className="rounded border-gray-300"
+                                                />
+                                                <span className="text-sm">Group {group}</span>
+                                            </label>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p className="text-sm text-muted-foreground">No groups available. Create stores with groups first.</p>
+                                )}
+                                {errors.groups && (
+                                    <p className="text-sm text-destructive">{errors.groups}</p>
+                                )}
+                            </div>
+                        )}
 
                         {/* Password */}
                         <div className="space-y-2">

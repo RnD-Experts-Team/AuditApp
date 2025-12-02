@@ -5,95 +5,31 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-use Laravel\Fortify\TwoFactorAuthenticatable;
-use Spatie\Permission\Traits\HasRoles;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class User extends Authenticatable
 {
-    /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasFactory, Notifiable, TwoFactorAuthenticatable, HasRoles;
+    use HasFactory, Notifiable;
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var list<string>
-     */
     protected $fillable = [
         'name',
         'email',
-        'role',
         'password',
+        'role',
     ];
 
-    /**
-     * The attributes that should be hidden for serialization.
-     *
-     * @var list<string>
-     */
     protected $hidden = [
         'password',
-        'two_factor_secret',
-        'two_factor_recovery_codes',
         'remember_token',
     ];
 
-    /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
-     */
-    protected function casts(): array
-    {
-        return [
-            'email_verified_at' => 'datetime',
-            'password' => 'hashed',
-            'two_factor_confirmed_at' => 'datetime',
-        ];
-    }
-
-    /**
-     * Get all audits for this user.
-     */
-    public function audits(): HasMany
-    {
-        return $this->hasMany(Audit::class);
-    }
-
-    /**
-     * Get all camera forms for this user.
-     */
-    public function cameraForms(): HasMany
-    {
-        return $this->hasMany(CameraForm::class);
-    }
+    protected $casts = [
+        'email_verified_at' => 'datetime',
+        'password' => 'hashed',
+    ];
 
     /**
      * Get all groups assigned to this user.
-     */
-    public function groups(): BelongsToMany
-    {
-        return $this->belongsToMany(
-            Store::class,
-            'user_groups',
-            'user_id',
-            'group',
-            'id',
-            'group'
-        );
-    }
-
-    /**
-     * Get the groups as array of numbers.
-     */
-    public function getGroupsAttribute(): array
-    {
-        return $this->userGroups()->pluck('group')->toArray();
-    }
-
-    /**
-     * Relationship for user groups.
      */
     public function userGroups(): HasMany
     {
@@ -109,6 +45,17 @@ class User extends Authenticatable
     }
 
     /**
+     * Get all group numbers for this user.
+     */
+    public function getGroupNumbers(): array
+    {
+        if ($this->isAdmin()) {
+            return [];
+        }
+        return $this->userGroups()->pluck('group')->toArray();
+    }
+
+    /**
      * Check if user has access to a specific group.
      */
     public function hasGroupAccess(int $group): bool
@@ -116,17 +63,28 @@ class User extends Authenticatable
         if ($this->isAdmin()) {
             return true;
         }
-
-        return $this->userGroups()
-            ->where('group', $group)
-            ->exists();
+        return $this->userGroups()->where('group', $group)->exists();
     }
 
     /**
-     * Check if user has access to a store.
+     * Check if user can access a store.
      */
     public function canAccessStore(Store $store): bool
     {
+        if ($this->isAdmin()) {
+            return true;
+        }
+        if (!$store->group) {
+            return false;
+        }
         return $this->hasGroupAccess($store->group);
+    }
+
+    /**
+     * Check if user can access audit (via store).
+     */
+    public function canAccessAudit(Audit $audit): bool
+    {
+        return $this->canAccessStore($audit->store);
     }
 }

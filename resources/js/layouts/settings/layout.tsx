@@ -7,7 +7,7 @@ import { edit } from '@/routes/profile';
 import { show } from '@/routes/two-factor';
 import { edit as editPassword } from '@/routes/user-password';
 import { type NavItem } from '@/types';
-import { Link } from '@inertiajs/react';
+import { Link, usePage } from '@inertiajs/react';
 import { type PropsWithChildren } from 'react';
 
 const sidebarNavItems: NavItem[] = [
@@ -35,16 +35,29 @@ const sidebarNavItems: NavItem[] = [
         title: 'Users',
         href: '/users',
         icon: null,
+        admin: true,
     },
 ];
 
 export default function SettingsLayout({ children }: PropsWithChildren) {
+    const { auth } = usePage().props;
+    const isAdmin = auth.user?.role === 'Admin';
+
     // When server-side rendering, we only render the layout on the client...
     if (typeof window === 'undefined') {
         return null;
     }
 
     const currentPath = window.location.pathname;
+
+    // Filter sidebar items based on user role
+    const filteredNavItems = sidebarNavItems.filter(item => {
+        // If item has admin flag and user is not admin, hide it
+        if ((item as any).admin && !isAdmin) {
+            return false;
+        }
+        return true;
+    });
 
     return (
         <div className="px-4 py-6">
@@ -56,7 +69,7 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
             <div className="flex flex-col lg:flex-row lg:space-x-12">
                 <aside className="w-full max-w-xl lg:w-48">
                     <nav className="flex flex-col space-y-1 space-x-0">
-                        {sidebarNavItems.map((item, index) => (
+                        {filteredNavItems.map((item, index) => (
                             <Button
                                 key={`${resolveUrl(item.href)}-${index}`}
                                 size="sm"

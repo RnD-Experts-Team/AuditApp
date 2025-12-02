@@ -22,13 +22,16 @@ Route::middleware(['auth'])->group(function () {
     })->name('dashboard');
 
     Route::resource('camera-forms', CameraFormController::class);
-    Route::resource('stores', StoreController::class)->except(['show', 'create', 'edit']);
-    Route::resource('entities', EntityController::class)->except(['show', 'create', 'edit']);
-    Route::resource('categories', CategoryController::class)->only(['store', 'update', 'destroy']);
-    Route::resource('users', UserController::class);
     // Camera Reports
     Route::get('camera-reports', [CameraReportController::class, 'index'])->name('camera-reports.index');
     Route::get('camera-reports/export', [CameraReportController::class, 'export'])->name('camera-reports.export');
-});
+
+    Route::middleware('admin.only')->group(function () {
+        Route::resource('stores', StoreController::class)->except(['show', 'create', 'edit']);
+        Route::resource('entities', EntityController::class)->except(['show', 'create', 'edit']);
+        Route::resource('categories', CategoryController::class)->only(['store', 'update', 'destroy']);
+        Route::resource('users', UserController::class);
+        });
+    });
 
 require __DIR__.'/settings.php';

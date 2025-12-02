@@ -19,65 +19,91 @@ class CameraFormController extends Controller
      * Display a listing of camera forms grouped by audits.
      */
     public function index(Request $request)
-{
-    $dateRangeType = $request->input('date_range_type', 'daily');
+    {
+        $user = auth()->user();
+        $dateRangeType = $request->input('date_range_type', 'daily');
 
-    // Get all entities for the current tab (these will be the dynamic columns)
-    $entities = Entity::with('category')
-        ->where('date_range_type', $dateRangeType)
-        ->orderBy('category_id')
-        ->orderBy('entity_label')
-        ->get();
+        // Get all entities for the current tab (these will be the dynamic columns)
+        $entities = Entity::with('category')
+            ->where('date_range_type', $dateRangeType)
+            ->orderBy('category_id')
+            ->orderBy('entity_label')
+            ->get();
 
-    // Build query for audits with filters
-    $query = Audit::with(['store', 'user', 'cameraForms.entity', 'cameraForms.rating'])
-        ->whereHas('cameraForms.entity', function ($q) use ($dateRangeType) {
-            $q->where('date_range_type', $dateRangeType);
-        });
+        // Build query for audits with filters
+        $query = Audit::with(['store', 'user', 'cameraForms.entity', 'cameraForms.rating'])
+            ->whereHas('cameraForms.entity', function ($q) use ($dateRangeType) {
+                $q->where('date_range_type', $dateRangeType);
+            });
 
-    // Date range filter
-    if ($request->filled('date_from')) {
-        $query->where('date', '>=', $request->date_from);
+        // Filter by user groups if not admin
+        if (!$user->isAdmin()) {
+            $userGroups = $user->getGroupNumbers();
+            $query->whereHas('store', function ($q) use ($userGroups) {
+                $q->whereIn('group', $userGroups);
+            });
+        }
+
+        // Date range filter
+        if ($request->filled('date_from')) {
+            $query->where('date', '>=', $request->date_from);
+        }
+        if ($request->filled('date_to')) {
+            $query->where('date', '<=', $request->date_to);
+        }
+
+        // Store filter
+        if ($request->filled('store_id')) {
+            $query->where('store_id', $request->store_id);
+        }
+
+        // Group filter
+        if ($request->filled('group')) {
+            $query->whereHas('store', function ($q) use ($request) {
+                $q->where('group', $request->group);
+            });
+        }
+
+        $audits = $query->orderBy('date', 'desc')->paginate(15);
+
+        // Get filter options - only show user's groups/stores
+        if ($user->isAdmin()) {
+            $stores = Store::select('id', 'store', 'group')->get();
+            $groups = Store::select('group')->distinct()->whereNotNull('group')->pluck('group');
+        } else {
+            $userGroups = $user->getGroupNumbers();
+            $stores = Store::select('id', 'store', 'group')
+                ->whereIn('group', $userGroups)
+                ->get();
+            $groups = collect($userGroups);
+        }
+
+        return Inertia::render('CameraForms/Index', [
+            'audits' => $audits,
+            'entities' => $entities,
+            'stores' => $stores,
+            'groups' => $groups,
+            'filters' => $request->only(['date_range_type', 'date_from', 'date_to', 'store_id', 'group']),
+        ]);
     }
-    if ($request->filled('date_to')) {
-        $query->where('date', '<=', $request->date_to);
-    }
-
-    // Store filter
-    if ($request->filled('store_id')) {
-        $query->where('store_id', $request->store_id);
-    }
-
-    // Group filter
-    if ($request->filled('group')) {
-        $query->whereHas('store', function ($q) use ($request) {
-            $q->where('group', $request->group);
-        });
-    }
-
-    $audits = $query->orderBy('date', 'desc')->paginate(15);
-
-    // Get filter options
-    $stores = Store::select('id', 'store', 'group')->get();
-    $groups = Store::select('group')->distinct()->whereNotNull('group')->pluck('group');
-
-    return Inertia::render('CameraForms/Index', [
-        'audits' => $audits,
-        'entities' => $entities, // Add this
-        'stores' => $stores,
-        'groups' => $groups,
-        'filters' => $request->only(['date_range_type', 'date_from', 'date_to', 'store_id', 'group']),
-    ]);
-}
 
     /**
      * Show the form for creating a new camera form.
      */
     public function create()
     {
+        $user = auth()->user();
+
         $entities = Entity::with('category')->get();
         $ratings = Rating::all();
-        $stores = Store::all();
+
+        // Filter stores by user groups if not admin
+        if ($user->isAdmin()) {
+            $stores = Store::all();
+        } else {
+            $userGroups = $user->getGroupNumbers();
+            $stores = Store::whereIn('group', $userGroups)->get();
+        }
 
         return Inertia::render('CameraForms/Create', [
             'entities' => $entities,
@@ -91,6 +117,14 @@ class CameraFormController extends Controller
      */
     public function store(StoreCameraFormRequest $request)
     {
+        $user = auth()->user();
+
+        // Check if user has access to this store
+        $store = Store::findOrFail($request->store_id);
+        if (!$user->isAdmin() && !$user->hasGroupAccess($store->group)) {
+            abort(403, 'Unauthorized');
+        }
+
         DB::beginTransaction();
 
         try {
@@ -131,6 +165,8 @@ class CameraFormController extends Controller
      */
     public function edit($id)
     {
+        $user = auth()->user();
+
         $audit = Audit::with([
             'store',
             'user',
@@ -138,10 +174,20 @@ class CameraFormController extends Controller
             'cameraForms.rating'
         ])->findOrFail($id);
 
-        // We don't even need to send separate entities anymore
-        // since they're already loaded in audit.cameraForms.entity
+        // Check if user has access to this audit
+        if (!$user->isAdmin() && !$user->canAccessAudit($audit)) {
+            abort(403, 'Unauthorized');
+        }
+
         $ratings = Rating::all();
-        $stores = Store::all();
+
+        // Filter stores by user groups if not admin
+        if ($user->isAdmin()) {
+            $stores = Store::all();
+        } else {
+            $userGroups = $user->getGroupNumbers();
+            $stores = Store::whereIn('group', $userGroups)->get();
+        }
 
         return Inertia::render('CameraForms/Edit', [
             'audit' => $audit,
@@ -150,17 +196,29 @@ class CameraFormController extends Controller
         ]);
     }
 
-
     /**
      * Update the specified camera form in storage.
      */
     public function update(UpdateCameraFormRequest $request, $id)
     {
+        $user = auth()->user();
+
+        $audit = Audit::findOrFail($id);
+
+        // Check if user has access to this audit
+        if (!$user->isAdmin() && !$user->canAccessAudit($audit)) {
+            abort(403, 'Unauthorized');
+        }
+
+        // Check if user has access to the new store
+        $store = Store::findOrFail($request->store_id);
+        if (!$user->isAdmin() && !$user->hasGroupAccess($store->group)) {
+            abort(403, 'Unauthorized');
+        }
+
         DB::beginTransaction();
 
         try {
-            $audit = Audit::findOrFail($id);
-
             // Update the audit record
             $audit->update([
                 'store_id' => $request->store_id,
@@ -187,7 +245,6 @@ class CameraFormController extends Controller
 
             return redirect()->route('camera-forms.index')
                 ->with('success', 'Camera form updated successfully.');
-
         } catch (\Exception $e) {
             DB::rollBack();
 
@@ -197,19 +254,25 @@ class CameraFormController extends Controller
         }
     }
 
-
     /**
      * Remove the specified camera form from storage.
      */
     public function destroy($id)
     {
+        $user = auth()->user();
+
+        $audit = Audit::findOrFail($id);
+
+        // Check if user has access to this audit
+        if (!$user->isAdmin() && !$user->canAccessAudit($audit)) {
+            abort(403, 'Unauthorized');
+        }
+
         try {
-            $audit = Audit::findOrFail($id);
             $audit->delete();
 
             return redirect()->route('camera-forms.index')
                 ->with('success', 'Camera form deleted successfully.');
-
         } catch (\Exception $e) {
             \Log::error('Failed to delete audit: ' . $e->getMessage());
 
@@ -217,8 +280,13 @@ class CameraFormController extends Controller
         }
     }
 
+    /**
+     * Show the specified camera form.
+     */
     public function show($id)
     {
+        $user = auth()->user();
+
         $audit = Audit::with([
             'store',
             'user',
@@ -226,9 +294,13 @@ class CameraFormController extends Controller
             'cameraForms.rating'
         ])->findOrFail($id);
 
+        // Check if user has access to this audit
+        if (!$user->isAdmin() && !$user->canAccessAudit($audit)) {
+            abort(403, 'Unauthorized');
+        }
+
         return Inertia::render('CameraForms/Show', [
             'audit' => $audit,
         ]);
     }
-
 }

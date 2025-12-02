@@ -5,7 +5,6 @@ import { Store, Entity, Category } from '@/types/models';
 import { PageProps } from '@/types';
 import { Filter, Download, RefreshCw } from 'lucide-react';
 
-
 interface EntityData {
     entity_id: number;
     entity_label: string;
@@ -16,7 +15,6 @@ interface EntityData {
     category?: Category;
 }
 
-
 interface StoreSummary {
     store_id: number;
     store_name: string;
@@ -24,14 +22,12 @@ interface StoreSummary {
     entities: Record<number, EntityData>;
 }
 
-
 interface ReportData {
     summary: StoreSummary[];
     entities: Entity[];
     total_stores: number;
     scoreData: Record<string, { score_without_auto_fail: number | null; score_with_auto_fail: number | null }>;
 }
-
 
 interface CameraReportsProps extends Record<string, unknown> {
     reportData: ReportData;
@@ -45,7 +41,6 @@ interface CameraReportsProps extends Record<string, unknown> {
         report_type?: 'main' | 'secondary' | '';
     };
 }
-
 
 export default function Index({
     auth,
@@ -62,7 +57,6 @@ export default function Index({
     const [year, setYear] = useState<number>(filters.year || new Date().getFullYear());
     const [week, setWeek] = useState<number>(filters.week || 1);
 
-
     const applyFilters = () => {
         router.get('/camera-reports', {
             report_type: reportType,
@@ -76,7 +70,6 @@ export default function Index({
         });
     };
 
-
     const resetFilters = () => {
         setReportType('');
         setStoreId('');
@@ -86,11 +79,9 @@ export default function Index({
         router.get('/camera-reports');
     };
 
-
     const handleExport = () => {
         alert('Export feature coming soon!');
     };
-
 
     const formatEntitySummary = (storeSummary: StoreSummary, entityId: number): string => {
         const entityData = storeSummary.entities[entityId];
@@ -103,10 +94,8 @@ export default function Index({
             .join(', ');
     };
 
-
     const { summary, entities, total_stores, scoreData } = reportData;
     const categories: Record<string, { id: number | null; label: string; entities: Entity[] }> = {};
-
 
     entities.forEach((entity) => {
         const catId = entity.category?.id ?? 0;
@@ -121,9 +110,7 @@ export default function Index({
         categories[catLabel].entities.push(entity);
     });
 
-
     const categoryGroups = Object.values(categories);
-
 
     return (
         <AuthenticatedLayout user={auth.user}>
@@ -145,7 +132,6 @@ export default function Index({
                     </button>
                 </div>
 
-
                 <div className="rounded-lg border bg-card">
                     <div className="bg-gradient-to-r from-primary/10 to-accent/10 px-6 py-4 border-b">
                         <div className="flex items-center gap-2">
@@ -153,7 +139,6 @@ export default function Index({
                             <h3 className="text-lg font-semibold">Filters</h3>
                         </div>
                     </div>
-
 
                     <div className="p-6 space-y-4">
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -241,7 +226,6 @@ export default function Index({
                     </div>
                 </div>
 
-
                 <div className="rounded-lg border bg-card p-4">
                     <p className="text-sm text-muted-foreground">
                         Showing{' '}
@@ -255,7 +239,6 @@ export default function Index({
                         entities
                     </p>
                 </div>
-
 
                 <div className="rounded-lg border bg-card overflow-x-auto">
                     <table className="w-full caption-bottom text-sm border-separate border-spacing-0">
