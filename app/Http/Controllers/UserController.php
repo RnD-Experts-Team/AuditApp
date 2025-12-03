@@ -35,6 +35,9 @@ class UserController extends Controller
         return Inertia::render('Users/Create', ['groups' => $groups]);
     }
 
+
+
+    
     /**
      * Store a newly created resource in storage.
      */
