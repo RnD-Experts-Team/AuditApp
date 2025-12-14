@@ -11,10 +11,8 @@ use App\Http\Controllers\CameraReportController;
 use App\Http\Controllers\UserController;
 
 Route::get('/', function () {
-    return Inertia::render('welcome', [
-        // 'canRegister' => Features::enabled(Features::registration()),
-    ]);
-})->name('home');
+    return redirect('/login');
+});
 
 Route::middleware(['auth'])->group(function () {
     Route::get('dashboard', function () {
