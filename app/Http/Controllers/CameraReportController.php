@@ -40,25 +40,12 @@ class CameraReportController extends Controller
             'reportData' => $reportData,
             'stores' => $stores,
             'groups' => $groups,
-            'filters' => $request->only(['store_id', 'group', 'year', 'week', 'report_type', 'date_from', 'date_to']),
+            'filters' => $request->only(['store_id', 'group', 'report_type', 'date_from', 'date_to']),
         ]);
-    }
-
-    private function getWeekStartAndEnd($year, $week)
-    {
-        // 2 = Tuesday, ISO weeks (Monday start by default)
-        $dt = new \DateTime();
-        $dt->setISODate($year, $week, 2); // Tuesday of the week
-        $startOfWeek = $dt->format('Y-m-d');
-        $dt->modify('+6 days');
-        $endOfWeek = $dt->format('Y-m-d');
-        return [$startOfWeek, $endOfWeek];
     }
 
     private function getReportData(Request $request, $user)
     {
-        $year = $request->input('year');
-        $week = $request->input('week');
         $storeId = $request->input('store_id');
         $group = $request->input('group');
         $reportType = $request->input('report_type');
@@ -89,12 +76,6 @@ class CameraReportController extends Controller
             ->when($storeId, fn($q) => $q->where('stores.id', $storeId))
             ->when($group, fn($q) => $q->where('stores.group', $group))
             ->when($reportType, fn($q) => $q->where('entities.report_type', $reportType));
-
-        // Apply week filter
-        if ($year && $week) {
-            [$weekStart, $weekEnd] = $this->getWeekStartAndEnd($year, $week);
-            $cameraForms = $cameraForms->whereBetween('audits.date', [$weekStart, $weekEnd]);
-        }
 
         // Apply date range filter
         if ($dateFrom) {

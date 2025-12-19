@@ -36,8 +36,6 @@ interface CameraReportsProps extends Record<string, unknown> {
     filters: {
         store_id?: number;
         group?: number;
-        year?: number;
-        week?: number;
         report_type?: 'main' | 'secondary' | '';
         date_from?: string;
         date_to?: string;
