@@ -7,6 +7,7 @@ export interface User {
 export interface Category {
     id: number;
     label: string;
+    sort_order: number | null;
     created_at: string;
     updated_at: string;
 }
@@ -18,6 +19,7 @@ export interface Entity {
     category?: Category;
     date_range_type: 'daily' | 'weekly';
     report_type: 'main' | 'secondary' | null;
+    sort_order: number | null;
     created_at: string;
     updated_at: string;
 }

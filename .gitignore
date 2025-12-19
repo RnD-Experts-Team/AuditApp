@@ -11,6 +11,7 @@
 /storage/pail
 /vendor
 .DS_Store
+.kiro
 .env
 .env.backup
 .env.production

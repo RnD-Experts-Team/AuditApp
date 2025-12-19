@@ -4,12 +4,19 @@ namespace App\Http\Controllers;
 
 use App\Models\Store;
 use App\Models\Entity;
+use App\Services\ScoringService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 
 class CameraReportController extends Controller
 {
+    protected $scoringService;
+
+    public function __construct(ScoringService $scoringService)
+    {
+        $this->scoringService = $scoringService;
+    }
     public function index(Request $request)
     {
         $user = auth()->user();
@@ -33,28 +40,17 @@ class CameraReportController extends Controller
             'reportData' => $reportData,
             'stores' => $stores,
             'groups' => $groups,
-            'filters' => $request->only(['store_id', 'group', 'year', 'week', 'report_type']),
+            'filters' => $request->only(['store_id', 'group', 'report_type', 'date_from', 'date_to']),
         ]);
-    }
-
-    private function getWeekStartAndEnd($year, $week)
-    {
-        // 2 = Tuesday, ISO weeks (Monday start by default)
-        $dt = new \DateTime();
-        $dt->setISODate($year, $week, 2); // Tuesday of the week
-        $startOfWeek = $dt->format('Y-m-d');
-        $dt->modify('+6 days');
-        $endOfWeek = $dt->format('Y-m-d');
-        return [$startOfWeek, $endOfWeek];
     }
 
     private function getReportData(Request $request, $user)
     {
-        $year = $request->input('year');
-        $week = $request->input('week');
         $storeId = $request->input('store_id');
         $group = $request->input('group');
         $reportType = $request->input('report_type');
+        $dateFrom = $request->input('date_from');
+        $dateTo = $request->input('date_to');
 
         // Get user's groups for filtering
         $userGroups = $user->isAdmin() ? null : $user->getGroupNumbers();
@@ -81,9 +77,12 @@ class CameraReportController extends Controller
             ->when($group, fn($q) => $q->where('stores.group', $group))
             ->when($reportType, fn($q) => $q->where('entities.report_type', $reportType));
 
-        if ($year && $week) {
-            [$weekStart, $weekEnd] = $this->getWeekStartAndEnd($year, $week);
-            $cameraForms = $cameraForms->whereBetween('audits.date', [$weekStart, $weekEnd]);
+        // Apply date range filter
+        if ($dateFrom) {
+            $cameraForms = $cameraForms->where('audits.date', '>=', $dateFrom);
+        }
+        if ($dateTo) {
+            $cameraForms = $cameraForms->where('audits.date', '<=', $dateTo);
         }
 
         $cameraForms = $cameraForms->get();
@@ -137,62 +136,45 @@ class CameraReportController extends Controller
                 ];
             }
 
-            // --- Scoring logic for BOTH columns ---
+            // --- Scoring logic using ScoringService ---
             $perDateScoresWithoutAuto = [];
-            $perDateScoresWithAuto = [];
             $hasAnyWeeklyAutoFail = false;
-            $totalDailyAutoFails = 0;
 
             if (isset($formsByStoreByDate[$storeId])) {
                 foreach ($formsByStoreByDate[$storeId] as $dateStr => $forms) {
+                    // Calculate score without Auto Fail consideration
                     $pass = $fail = 0;
-                    $hasWeeklyAutoFail = false;
-                    $autoFailPresentInDaily = false;
-
                     foreach ($forms as $form) {
                         $label = strtolower($form->rating_label ?? '');
                         if ($label === 'pass') $pass++;
                         if ($label === 'fail') $fail++;
-                        if ($label === 'auto fail') {
-                            if ($form->date_range_type === "weekly") {
-                                $hasWeeklyAutoFail = true;
-                            }
-                            if ($form->date_range_type === "daily") {
-                                $autoFailPresentInDaily = true;
-                                $totalDailyAutoFails++; // count every daily auto fail
-                            }
-                        }
                     }
-                    if ($hasWeeklyAutoFail) $hasAnyWeeklyAutoFail = true;
-
-                    // Score WITHOUT auto fail
                     $denom = $pass + $fail;
                     $scoreWithoutAuto = ($denom > 0) ? $pass / $denom : null;
                     $perDateScoresWithoutAuto[] = $scoreWithoutAuto;
 
-                    // Score WITH auto fail rules
-                    if ($hasWeeklyAutoFail) {
-                        $perDateScoresWithAuto[] = 0;
-                    } elseif ($autoFailPresentInDaily) {
-                        $perDateScoresWithAuto[] = 0;
-                    } else {
-                        $perDateScoresWithAuto[] = ($denom > 0) ? $pass / $denom : null;
+                    // Check for weekly Auto Fail
+                    foreach ($forms as $form) {
+                        if (strtolower($form->rating_label ?? '') === 'auto fail' && $form->date_range_type === 'weekly') {
+                            $hasAnyWeeklyAutoFail = true;
+                            break;
+                        }
                     }
                 }
             }
 
-            // Final store score logic
+            // Calculate final scores
             $valsWithoutAuto = array_filter($perDateScoresWithoutAuto, fn($v) => is_numeric($v));
             $finalScoreWithoutAuto = count($valsWithoutAuto) ? round(array_sum($valsWithoutAuto) / count($valsWithoutAuto), 2) : null;
 
+            // Calculate score with Auto Fail rules using ScoringService
             $finalScoreWithAuto = null;
-            if ($hasAnyWeeklyAutoFail) {
-                $finalScoreWithAuto = 0;
-            } elseif ($totalDailyAutoFails >= 3) {
-                $finalScoreWithAuto = 0;
-            } else {
-                $vals = array_filter($perDateScoresWithAuto, fn($v) => is_numeric($v));
-                $finalScoreWithAuto = count($vals) ? round(array_sum($vals) / count($vals), 2) : null;
+            if (isset($formsByStoreByDate[$storeId])) {
+                $weeklyScore = $this->scoringService->calculateWeeklyScore(
+                    $formsByStoreByDate[$storeId],
+                    $hasAnyWeeklyAutoFail
+                );
+                $finalScoreWithAuto = $weeklyScore !== null ? round($weeklyScore, 2) : null;
             }
 
             $scoreData[$storeId] = [

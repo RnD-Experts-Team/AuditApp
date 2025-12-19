@@ -15,8 +15,20 @@ class EntityController extends Controller
      */
     public function index()
     {
-        $entities = Entity::with('category')->orderBy('category_id')->orderBy('entity_label')->get();
-        $categories = Category::withCount('entities')->orderBy('label')->get();
+        // Order categories by sort_order (nulls last), then alphabetically
+        $categories = Category::withCount('entities')
+            ->orderByRaw('sort_order IS NULL, sort_order ASC')
+            ->orderBy('label')
+            ->get();
+
+        // Order entities by category sort_order, then entity sort_order, then alphabetically
+        $entities = Entity::with('category')
+            ->leftJoin('categories', 'entities.category_id', '=', 'categories.id')
+            ->select('entities.*')
+            ->orderByRaw('categories.sort_order IS NULL, categories.sort_order ASC')
+            ->orderByRaw('entities.sort_order IS NULL, entities.sort_order ASC')
+            ->orderBy('entities.entity_label')
+            ->get();
 
         return Inertia::render('Entities/Index', [
             'entities' => $entities,
@@ -34,6 +46,7 @@ class EntityController extends Controller
             'category_id' => 'nullable|exists:categories,id',
             'date_range_type' => 'required|in:daily,weekly',
             'report_type' => 'nullable|in:main,secondary',
+            'sort_order' => 'nullable|integer|min:0',
         ]);
 
         Entity::create($validated);
@@ -53,6 +66,7 @@ class EntityController extends Controller
             'category_id' => 'nullable|exists:categories,id',
             'date_range_type' => 'required|in:daily,weekly',
             'report_type' => 'nullable|in:main,secondary',
+            'sort_order' => 'nullable|integer|min:0',
         ]);
 
         $entity->update($validated);

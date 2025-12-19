@@ -14,8 +14,8 @@ export default function Index({ auth, entities, categories }: PageProps<Entities
     // Categories state
     const [isAddingCategory, setIsAddingCategory] = useState(false);
     const [editingCategoryId, setEditingCategoryId] = useState<number | null>(null);
-    const [newCategory, setNewCategory] = useState('');
-    const [editCategory, setEditCategory] = useState('');
+    const [newCategory, setNewCategory] = useState({ label: '', sort_order: '' });
+    const [editCategory, setEditCategory] = useState({ label: '', sort_order: '' });
 
     // Entities state
     const [isAddingEntity, setIsAddingEntity] = useState(false);
@@ -25,12 +25,14 @@ export default function Index({ auth, entities, categories }: PageProps<Entities
         category_id: '',
         date_range_type: 'daily',
         report_type: '',
+        sort_order: '',
     });
     const [editEntity, setEditEntity] = useState({
         entity_label: '',
         category_id: '',
         date_range_type: 'daily',
         report_type: '',
+        sort_order: '',
     });
 
     const [errors, setErrors] = useState<Record<string, string>>({});
@@ -38,10 +40,13 @@ export default function Index({ auth, entities, categories }: PageProps<Entities
     // Category handlers
     const handleAddCategory: FormEventHandler = (e) => {
         e.preventDefault();
-        router.post('/categories', { label: newCategory }, {
+        router.post('/categories', {
+            label: newCategory.label,
+            sort_order: newCategory.sort_order || null,
+        }, {
             preserveScroll: true,
             onSuccess: () => {
-                setNewCategory('');
+                setNewCategory({ label: '', sort_order: '' });
                 setIsAddingCategory(false);
                 setErrors({});
             },
@@ -51,7 +56,10 @@ export default function Index({ auth, entities, categories }: PageProps<Entities
 
     const handleEditCategory = (category: Category) => {
         setEditingCategoryId(category.id);
-        setEditCategory(category.label);
+        setEditCategory({
+            label: category.label,
+            sort_order: category.sort_order?.toString() || '',
+        });
         setErrors({});
     };
 
@@ -59,11 +67,14 @@ export default function Index({ auth, entities, categories }: PageProps<Entities
         e.preventDefault();
         if (!editingCategoryId) return;
 
-        router.put(`/categories/${editingCategoryId}`, { label: editCategory }, {
+        router.put(`/categories/${editingCategoryId}`, {
+            label: editCategory.label,
+            sort_order: editCategory.sort_order || null,
+        }, {
             preserveScroll: true,
             onSuccess: () => {
                 setEditingCategoryId(null);
-                setEditCategory('');
+                setEditCategory({ label: '', sort_order: '' });
                 setErrors({});
             },
             onError: (errors) => setErrors(errors),
@@ -86,6 +97,7 @@ export default function Index({ auth, entities, categories }: PageProps<Entities
             ...newEntity,
             category_id: newEntity.category_id || null,
             report_type: newEntity.report_type || null,
+            sort_order: newEntity.sort_order || null,
         }, {
             preserveScroll: true,
             onSuccess: () => {
@@ -94,6 +106,7 @@ export default function Index({ auth, entities, categories }: PageProps<Entities
                     category_id: '',
                     date_range_type: 'daily',
                     report_type: '',
+                    sort_order: '',
                 });
                 setIsAddingEntity(false);
                 setErrors({});
@@ -109,6 +122,7 @@ export default function Index({ auth, entities, categories }: PageProps<Entities
             category_id: entity.category_id?.toString() || '',
             date_range_type: entity.date_range_type,
             report_type: entity.report_type || '',
+            sort_order: entity.sort_order?.toString() || '',
         });
         setErrors({});
     };
@@ -121,6 +135,7 @@ export default function Index({ auth, entities, categories }: PageProps<Entities
             ...editEntity,
             category_id: editEntity.category_id || null,
             report_type: editEntity.report_type || null,
+            sort_order: editEntity.sort_order || null,
         }, {
             preserveScroll: true,
             onSuccess: () => {
@@ -130,6 +145,7 @@ export default function Index({ auth, entities, categories }: PageProps<Entities
                     category_id: '',
                     date_range_type: 'daily',
                     report_type: '',
+                    sort_order: '',
                 });
                 setErrors({});
             },
@@ -220,17 +236,27 @@ export default function Index({ auth, entities, categories }: PageProps<Entities
                                     {isAddingCategory && (
                                         <tr className="border-b bg-accent/5">
                                             <td className="p-3" colSpan={2}>
-                                                <input
-                                                    type="text"
-                                                    placeholder="Category name"
-                                                    value={newCategory}
-                                                    onChange={(e) => setNewCategory(e.target.value)}
-                                                    className="flex h-8 w-full rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                                                    autoFocus
-                                                />
-                                                {errors.label && (
-                                                    <p className="text-xs text-destructive mt-1">{errors.label}</p>
-                                                )}
+                                                <div className="space-y-2">
+                                                    <input
+                                                        type="text"
+                                                        placeholder="Category name"
+                                                        value={newCategory.label}
+                                                        onChange={(e) => setNewCategory({ ...newCategory, label: e.target.value })}
+                                                        className="flex h-8 w-full rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                                        autoFocus
+                                                    />
+                                                    <input
+                                                        type="number"
+                                                        placeholder="Sort order (optional)"
+                                                        value={newCategory.sort_order}
+                                                        onChange={(e) => setNewCategory({ ...newCategory, sort_order: e.target.value })}
+                                                        className="flex h-8 w-full rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                                        min="0"
+                                                    />
+                                                    {errors.label && (
+                                                        <p className="text-xs text-destructive mt-1">{errors.label}</p>
+                                                    )}
+                                                </div>
                                             </td>
                                             <td className="p-3 text-right">
                                                 <div className="flex justify-end gap-1">
@@ -243,7 +269,7 @@ export default function Index({ auth, entities, categories }: PageProps<Entities
                                                     <button
                                                         onClick={() => {
                                                             setIsAddingCategory(false);
-                                                            setNewCategory('');
+                                                            setNewCategory({ label: '', sort_order: '' });
                                                             setErrors({});
                                                         }}
                                                         className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-md border hover:bg-accent"
@@ -260,12 +286,22 @@ export default function Index({ auth, entities, categories }: PageProps<Entities
                                             {editingCategoryId === category.id ? (
                                                 <>
                                                     <td className="p-3" colSpan={2}>
-                                                        <input
-                                                            type="text"
-                                                            value={editCategory}
-                                                            onChange={(e) => setEditCategory(e.target.value)}
-                                                            className="flex h-8 w-full rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                                                        />
+                                                        <div className="space-y-2">
+                                                            <input
+                                                                type="text"
+                                                                value={editCategory.label}
+                                                                onChange={(e) => setEditCategory({ ...editCategory, label: e.target.value })}
+                                                                className="flex h-8 w-full rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                                            />
+                                                            <input
+                                                                type="number"
+                                                                placeholder="Sort order (optional)"
+                                                                value={editCategory.sort_order}
+                                                                onChange={(e) => setEditCategory({ ...editCategory, sort_order: e.target.value })}
+                                                                className="flex h-8 w-full rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                                                min="0"
+                                                            />
+                                                        </div>
                                                     </td>
                                                     <td className="p-3 text-right">
                                                         <div className="flex justify-end gap-1">
@@ -278,7 +314,7 @@ export default function Index({ auth, entities, categories }: PageProps<Entities
                                                             <button
                                                                 onClick={() => {
                                                                     setEditingCategoryId(null);
-                                                                    setEditCategory('');
+                                                                    setEditCategory({ label: '', sort_order: '' });
                                                                     setErrors({});
                                                                 }}
                                                                 className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-md border"
@@ -392,6 +428,14 @@ export default function Index({ auth, entities, categories }: PageProps<Entities
                                                             <option value="secondary">Secondary</option>
                                                         </select>
                                                     </div>
+                                                    <input
+                                                        type="number"
+                                                        placeholder="Sort order (optional)"
+                                                        value={newEntity.sort_order}
+                                                        onChange={(e) => setNewEntity({ ...newEntity, sort_order: e.target.value })}
+                                                        className="flex h-8 w-full rounded-md border border-input bg-background px-2 text-sm"
+                                                        min="0"
+                                                    />
                                                     <div className="flex justify-end gap-1">
                                                         <button
                                                             onClick={handleAddEntity}
@@ -407,6 +451,7 @@ export default function Index({ auth, entities, categories }: PageProps<Entities
                                                                     category_id: '',
                                                                     date_range_type: 'daily',
                                                                     report_type: '',
+                                                                    sort_order: '',
                                                                 });
                                                                 setErrors({});
                                                             }}
@@ -460,6 +505,14 @@ export default function Index({ auth, entities, categories }: PageProps<Entities
                                                                 <option value="secondary">Secondary</option>
                                                             </select>
                                                         </div>
+                                                        <input
+                                                            type="number"
+                                                            placeholder="Sort order (optional)"
+                                                            value={editEntity.sort_order}
+                                                            onChange={(e) => setEditEntity({ ...editEntity, sort_order: e.target.value })}
+                                                            className="flex h-8 w-full rounded-md border border-input bg-background px-2 text-sm"
+                                                            min="0"
+                                                        />
                                                         <div className="flex justify-end gap-1">
                                                             <button
                                                                 onClick={handleUpdateEntity}
@@ -475,6 +528,7 @@ export default function Index({ auth, entities, categories }: PageProps<Entities
                                                                         category_id: '',
                                                                         date_range_type: 'daily',
                                                                         report_type: '',
+                                                                        sort_order: '',
                                                                     });
                                                                     setErrors({});
                                                                 }}

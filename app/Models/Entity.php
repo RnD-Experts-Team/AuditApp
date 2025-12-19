@@ -16,11 +16,13 @@ class Entity extends Model
         'category_id',
         'date_range_type',
         'report_type',
+        'sort_order',
     ];
 
     protected $casts = [
         'date_range_type' => 'string',
         'report_type' => 'string',
+        'sort_order' => 'integer',
     ];
 
     /**

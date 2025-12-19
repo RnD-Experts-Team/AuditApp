@@ -83,7 +83,16 @@ export default function Create({
         }));
     };
 
-    const groupedEntities = filteredEntities.reduce((acc, entity) => {
+    // Sort entities by sort_order (nulls last), then alphabetically
+    const sortedEntities = [...filteredEntities].sort((a, b) => {
+        const orderA = a.sort_order ?? Number.MAX_SAFE_INTEGER;
+        const orderB = b.sort_order ?? Number.MAX_SAFE_INTEGER;
+        if (orderA !== orderB) return orderA - orderB;
+        return a.entity_label.localeCompare(b.entity_label);
+    });
+
+    // Group sorted entities by category
+    const groupedEntities = sortedEntities.reduce((acc, entity) => {
         const categoryLabel = entity.category?.label || 'Uncategorized';
         if (!acc[categoryLabel]) {
             acc[categoryLabel] = [];
@@ -91,6 +100,16 @@ export default function Create({
         acc[categoryLabel].push(entity);
         return acc;
     }, {} as Record<string, Entity[]>);
+
+    // Sort category keys by category sort_order (nulls last), then alphabetically
+    const sortedCategoryKeys = Object.keys(groupedEntities).sort((a, b) => {
+        const catA = sortedEntities.find(e => (e.category?.label || 'Uncategorized') === a)?.category;
+        const catB = sortedEntities.find(e => (e.category?.label || 'Uncategorized') === b)?.category;
+        const orderA = catA?.sort_order ?? Number.MAX_SAFE_INTEGER;
+        const orderB = catB?.sort_order ?? Number.MAX_SAFE_INTEGER;
+        if (orderA !== orderB) return orderA - orderB;
+        return a.localeCompare(b);
+    });
 
     return (
         <AuthenticatedLayout user={auth.user}>
@@ -197,7 +216,9 @@ export default function Create({
 
                     {/* Entities */}
                     <div className="space-y-4">
-                        {Object.entries(groupedEntities).map(([categoryLabel, categoryEntities]) => (
+                        {sortedCategoryKeys.map((categoryLabel) => {
+                            const categoryEntities = groupedEntities[categoryLabel];
+                            return (
                             <div key={categoryLabel} className="rounded-lg border bg-card">
                                 <div className="border-b bg-muted/50 px-6 py-4">
                                     <h3 className="text-lg font-semibold">{categoryLabel}</h3>
@@ -250,7 +271,8 @@ export default function Create({
                                     ))}
                                 </div>
                             </div>
-                        ))}
+                        );
+                        })}
                     </div>
 
                     {errors.entities && (

@@ -36,9 +36,9 @@ interface CameraReportsProps extends Record<string, unknown> {
     filters: {
         store_id?: number;
         group?: number;
-        year?: number;
-        week?: number;
         report_type?: 'main' | 'secondary' | '';
+        date_from?: string;
+        date_to?: string;
     };
 }
 
@@ -54,16 +54,16 @@ export default function Index({
     );
     const [storeId, setStoreId] = useState<number | string>(filters.store_id || '');
     const [group, setGroup] = useState<number | string>(filters.group || '');
-    const [year, setYear] = useState<number>(filters.year || new Date().getFullYear());
-    const [week, setWeek] = useState<number>(filters.week || 1);
+    const [dateFrom, setDateFrom] = useState<string>(filters.date_from || '');
+    const [dateTo, setDateTo] = useState<string>(filters.date_to || '');
 
     const applyFilters = () => {
         router.get('/camera-reports', {
             report_type: reportType,
             store_id: storeId,
             group: group,
-            year,
-            week,
+            date_from: dateFrom,
+            date_to: dateTo,
         }, {
             preserveState: true,
             preserveScroll: true,
@@ -74,8 +74,8 @@ export default function Index({
         setReportType('');
         setStoreId('');
         setGroup('');
-        setYear(new Date().getFullYear());
-        setWeek(1);
+        setDateFrom('');
+        setDateTo('');
         router.get('/camera-reports');
     };
 
@@ -124,7 +124,7 @@ export default function Index({
         if (reportType) filterParts.push(`Type-${reportType}`);
         if (storeId) filterParts.push(`Store-${storeId}`);
         if (group) filterParts.push(`Group-${group}`);
-        filterParts.push(`Week-${week}-${year}`);
+        if (dateFrom && dateTo) filterParts.push(`${dateFrom}_to_${dateTo}`);
 
         const filename = `camera-report-${filterParts.join('_')}_${timestamp}.csv`;
         link.setAttribute('download', filename);
@@ -238,25 +238,22 @@ export default function Index({
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div className="space-y-2">
-                                <label className="text-sm font-medium">Year</label>
+                                <label className="text-sm font-medium">Date From</label>
                                 <input
-                                    type="number"
-                                    value={year}
-                                    onChange={e => setYear(Number(e.target.value))}
+                                    type="date"
+                                    value={dateFrom}
+                                    onChange={e => setDateFrom(e.target.value)}
                                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                                 />
                             </div>
                             <div className="space-y-2">
-                                <label className="text-sm font-medium">Week</label>
+                                <label className="text-sm font-medium">Date To</label>
                                 <input
-                                    type="number"
-                                    min={1}
-                                    max={53}
-                                    value={week}
-                                    onChange={e => setWeek(Number(e.target.value))}
+                                    type="date"
+                                    value={dateTo}
+                                    onChange={e => setDateTo(e.target.value)}
                                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                                 />
-                                <p className="text-xs text-muted-foreground">Weeks start on Tuesday</p>
                             </div>
                         </div>
                         <div className="flex gap-2 pt-2">
