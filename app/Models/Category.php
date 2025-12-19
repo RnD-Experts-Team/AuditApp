@@ -9,6 +9,11 @@ class Category extends Model
 {
     protected $fillable = [
         'label',
+        'sort_order',
+    ];
+
+    protected $casts = [
+        'sort_order' => 'integer',
     ];
 
     public function entities(): HasMany

@@ -15,6 +15,7 @@ class CategoryController extends Controller
     {
         $validated = $request->validate([
             'label' => 'required|string|max:255|unique:categories,label',
+            'sort_order' => 'nullable|integer|min:0',
         ]);
 
         Category::create($validated);
@@ -36,6 +37,7 @@ class CategoryController extends Controller
                 'max:255',
                 Rule::unique('categories', 'label')->ignore($category->id)
             ],
+            'sort_order' => 'nullable|integer|min:0',
         ]);
 
         $category->update($validated);
