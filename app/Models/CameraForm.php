@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\Storage;
 
 class CameraForm extends Model
 {
@@ -16,37 +17,36 @@ class CameraForm extends Model
         'audit_id',
         'rating_id',
         'note',
+        'image_path',
     ];
 
-    /**
-     * Get the user that owns the camera form.
-     */
+    protected $appends = [
+        'image_url',
+    ];
+
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }
 
-    /**
-     * Get the entity that owns the camera form.
-     */
     public function entity(): BelongsTo
     {
         return $this->belongsTo(Entity::class);
     }
 
-    /**
-     * Get the audit that owns the camera form.
-     */
     public function audit(): BelongsTo
     {
         return $this->belongsTo(Audit::class);
     }
 
-    /**
-     * Get the rating that owns the camera form.
-     */
     public function rating(): BelongsTo
     {
         return $this->belongsTo(Rating::class);
+    }
+
+    public function getImageUrlAttribute(): ?string
+    {
+        if (!$this->image_path) return null;
+        return Storage::disk('public')->url($this->image_path);
     }
 }

@@ -63,7 +63,6 @@ class CategoryController extends Controller
             $category->delete();
 
             return back()->with('success', 'Category deleted successfully.');
-
         } catch (\Exception $e) {
             \Log::error('Delete category failed: ' . $e->getMessage());
 

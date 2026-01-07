@@ -31,6 +31,7 @@ class InitialDataSeeder extends Seeder
             ['label' => 'Not Done'],
             ['label' => 'Camera failure'],
             ['label' => 'Auto Fail'],
+            ['label' => 'Urgent'],
         ];
         Rating::insert($ratings);
 

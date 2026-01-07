@@ -7,6 +7,7 @@ use App\Models\Category;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
+use Illuminate\Support\Facades\Log;
 
 class EntityController extends Controller
 {
@@ -47,6 +48,7 @@ class EntityController extends Controller
             'date_range_type' => 'required|in:daily,weekly',
             'report_type' => 'nullable|in:main,secondary',
             'sort_order' => 'nullable|integer|min:0',
+            'active' => 'required|boolean',
         ]);
 
         Entity::create($validated);
@@ -67,6 +69,7 @@ class EntityController extends Controller
             'date_range_type' => 'required|in:daily,weekly',
             'report_type' => 'nullable|in:main,secondary',
             'sort_order' => 'nullable|integer|min:0',
+            'active' => 'required|boolean',
         ]);
 
         $entity->update($validated);
@@ -92,9 +95,8 @@ class EntityController extends Controller
             $entity->delete();
 
             return back()->with('success', 'Entity deleted successfully.');
-
         } catch (\Exception $e) {
-            \Log::error('Delete entity failed: ' . $e->getMessage());
+            Log::error('Delete entity failed: ' . $e->getMessage());
 
             return back()->withErrors([
                 'error' => 'Failed to delete entity: ' . $e->getMessage()

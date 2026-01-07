@@ -51,6 +51,7 @@ class CameraFormTablesSeeder extends Seeder
             ['label' => 'Not Done'],
             ['label' => 'Camera failure'],
             ['label' => 'Auto Fail'],
+            ['label' => 'Urgent'],
         ];
 
         foreach ($ratings as $rating) {
