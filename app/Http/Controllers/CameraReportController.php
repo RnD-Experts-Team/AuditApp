@@ -65,8 +65,7 @@ class CameraReportController extends Controller
 
     /**
      * Export ZIP containing XLSX + attachments.
-     * XLSX columns must match the FRONTEND TABLE exactly:
-     * Store + visibleEntities (frontend logic) + 2 score columns.
+     * XLSX columns must match the FRONTEND (visibleEntities) + includes Notes column and previous styling.
      */
     public function export(Request $request): StreamedResponse
     {
@@ -105,9 +104,15 @@ class CameraReportController extends Controller
         $xlsxName = "{$baseName}.xlsx";
         $zipName  = "{$baseName}.zip";
 
-        // 4) Build XLSX that matches frontend columns exactly
+        // 4) Build XLSX (previous design + notes column) but only visibleEntities columns
         $tmpXlsxPath = storage_path('app/tmp_' . Str::random(16) . '.xlsx');
-        $this->buildFrontendExactXlsx($tmpXlsxPath, $summary, $visibleEntities, $categoryGroups, $scoreData);
+        $this->buildReportXlsxPreviousDesignWithNotes(
+            $tmpXlsxPath,
+            $summary,
+            $visibleEntities,
+            $categoryGroups,
+            $scoreData
+        );
 
         // 5) Collect attachments
         $attachments = $this->getReportAttachments($request, $user);
@@ -155,8 +160,8 @@ class CameraReportController extends Controller
     }
 
     /**
-     * EXACT same logic as frontend visibleEntities useMemo:
-     * - keep entity if ANY store has ANY rating_count with count > 0
+     * EXACT same logic as frontend visibleEntities:
+     * keep entity if ANY store has ANY rating_count with count > 0
      */
     private function computeVisibleEntities($entities, array $summary)
     {
@@ -181,7 +186,7 @@ class CameraReportController extends Controller
 
                 foreach ($ratingCounts as $rc) {
                     $count = $rc['count'] ?? 0;
-                    if (is_numeric($count) && (int)$count > 0) {
+                    if (is_numeric($count) && (int) $count > 0) {
                         return true;
                     }
                 }
@@ -192,43 +197,33 @@ class CameraReportController extends Controller
     }
 
     /**
-     * Mirrors frontend categoryGroups:
-     * - group by category label
-     * - preserve insertion order (first seen order)
+     * Mirrors frontend categoryGroups idea:
+     * group by category label, preserve insertion order.
      */
     private function computeCategoryGroups($visibleEntities): array
     {
         $visibleEntities = collect($visibleEntities)->values();
 
-        $groups = []; // ['Label' => ['label'=>..., 'entities'=>[Entity...]]]
-
+        $groups = [];
         foreach ($visibleEntities as $entity) {
             $label = $entity->category->label ?? 'Uncategorized';
-
             if (!isset($groups[$label])) {
                 $groups[$label] = [
                     'label' => $label,
                     'entities' => [],
                 ];
             }
-
             $groups[$label]['entities'][] = $entity;
         }
 
-        // Return in insertion order as numeric array
         return array_values($groups);
     }
 
     /**
-     * XLSX builder that matches the FRONTEND table columns exactly:
-     * - Store
-     * - visible entity columns grouped by categoryGroups
-     * - Score Without Auto Fail
-     * - Total Score
-     *
-     * No Notes column (frontend doesn’t show notes in the table).
+     * Previous Excel layout + Notes column restored,
+     * while keeping columns EXACTLY to frontend's visibleEntities.
      */
-    private function buildFrontendExactXlsx(
+    private function buildReportXlsxPreviousDesignWithNotes(
         string $outputPath,
         array $summary,
         $visibleEntities,
@@ -241,70 +236,103 @@ class CameraReportController extends Controller
         $sheet = $spreadsheet->getActiveSheet();
         $sheet->setTitle('Camera Report');
 
-        $rowCat  = 1;
-        $rowEnt  = 2;
-        $rowData = 3;
+        $rowCategory = 1;
+        $rowEntity   = 2;
+        $rowSub      = 3;
+        $rowData     = 4;
 
-        // Store header
+        // Store header merged vertically
         $sheet->setCellValue('A1', 'Store');
-        $sheet->mergeCells('A1:A2');
+        $sheet->mergeCells('A1:A3');
 
-        $currentCol = 2; // B
+        $currentColIndex = 2; // B
 
-        // Category header + entity header
+        $palette = [
+            'D9E1F2',
+            'E2EFDA',
+            'FFF2CC',
+            'FCE4D6',
+            'E4DFEC',
+            'DDEBF7',
+            'F8CBAD',
+            'C6E0B4',
+            'FFD966',
+            'D0CECE'
+        ];
+
+        $catIdx = 0;
+        $categoryRanges = [];
+
+        // Entity columns (ONLY visible entities, grouped like frontend)
         foreach ($categoryGroups as $group) {
-            $startCol = $currentCol;
+            $catStartCol = $currentColIndex;
 
             foreach ($group['entities'] as $entity) {
-                $colLetter = Coordinate::stringFromColumnIndex($currentCol);
-                $sheet->setCellValue($colLetter . $rowEnt, (string) $entity->entity_label);
-                $currentCol++;
+                $colLetter = Coordinate::stringFromColumnIndex($currentColIndex);
+
+                $sheet->setCellValue($colLetter . $rowEntity, (string) $entity->entity_label);
+                $sheet->setCellValue($colLetter . $rowSub, 'Ratings');
+
+                $currentColIndex++;
             }
 
-            $endCol = $currentCol - 1;
+            $catEndCol = $currentColIndex - 1;
 
-            if ($endCol >= $startCol) {
-                $startLetter = Coordinate::stringFromColumnIndex($startCol);
-                $endLetter   = Coordinate::stringFromColumnIndex($endCol);
+            if ($catEndCol >= $catStartCol) {
+                $startLetter = Coordinate::stringFromColumnIndex($catStartCol);
+                $endLetter   = Coordinate::stringFromColumnIndex($catEndCol);
 
-                $sheet->setCellValue($startLetter . $rowCat, (string) $group['label']);
-                $sheet->mergeCells("{$startLetter}{$rowCat}:{$endLetter}{$rowCat}");
+                $sheet->setCellValue($startLetter . $rowCategory, (string) $group['label']);
+                $sheet->mergeCells("{$startLetter}{$rowCategory}:{$endLetter}{$rowCategory}");
+
+                $color = $palette[$catIdx % count($palette)];
+                $catIdx++;
+
+                $categoryRanges[] = [
+                    'start' => $catStartCol,
+                    'end'   => $catEndCol,
+                    'color' => $color,
+                ];
             }
         }
 
         // Score columns
-        $scoreWithoutCol = $currentCol;
-        $scoreWithCol    = $currentCol + 1;
+        $scoreWithoutCol = $currentColIndex;
+        $scoreWithCol    = $currentColIndex + 1;
 
         $swLetter = Coordinate::stringFromColumnIndex($scoreWithoutCol);
         $stLetter = Coordinate::stringFromColumnIndex($scoreWithCol);
 
-        $sheet->setCellValue($swLetter . $rowCat, 'Score Without Auto Fail');
-        $sheet->mergeCells("{$swLetter}{$rowCat}:{$swLetter}{$rowEnt}");
+        $sheet->setCellValue($swLetter . '1', 'Score Without Auto Fail');
+        $sheet->mergeCells("{$swLetter}1:{$swLetter}3");
 
-        $sheet->setCellValue($stLetter . $rowCat, 'Total Score');
-        $sheet->mergeCells("{$stLetter}{$rowCat}:{$stLetter}{$rowEnt}");
+        $sheet->setCellValue($stLetter . '1', 'Total Score');
+        $sheet->mergeCells("{$stLetter}1:{$stLetter}3");
 
-        $lastHeaderCol = $scoreWithCol;
+        // Notes column AFTER Total Score (restored)
+        $notesCol = $currentColIndex + 2;
+        $notesLetter = Coordinate::stringFromColumnIndex($notesCol);
+
+        $sheet->setCellValue($notesLetter . $rowCategory, 'Notes');
+        $sheet->mergeCells("{$notesLetter}{$rowCategory}:{$notesLetter}{$rowSub}");
+
+        $lastHeaderCol = $notesCol;
         $lastHeaderLetter = Coordinate::stringFromColumnIndex($lastHeaderCol);
 
         // ---- Data rows
-        $r = $rowData;
+        $writeRow = $rowData;
 
         foreach ($summary as $storeSummary) {
-            $sheet->setCellValue("A{$r}", $storeSummary['store_name'] ?? '');
+            $sheet->setCellValue("A{$writeRow}", $storeSummary['store_name'] ?? '');
 
+            // Ratings per visible entity (same data source as frontend)
             $col = 2; // B
-
-            // ONLY visible entities, in the same order the frontend renders them (categoryGroups order)
             foreach ($categoryGroups as $group) {
                 foreach ($group['entities'] as $entity) {
                     $entityId = $entity->id;
-
                     $entityData = $storeSummary['entities'][$entityId] ?? null;
 
-                    $cellText = '-';
-
+                    $ratingText = '-';
                     if ($entityData && isset($entityData['rating_counts']) && is_array($entityData['rating_counts'])) {
                         $parts = [];
                         foreach ($entityData['rating_counts'] as $rc) {
@@ -315,31 +343,56 @@ class CameraReportController extends Controller
                             }
                         }
                         if (count($parts) > 0) {
-                            // frontend joins with ", "
-                            $cellText = implode(', ', $parts);
+                            // Your old excel used ; but you said you don't care — keeping ; from previous design
+                            $ratingText = implode('; ', $parts);
                         }
                     }
 
-                    $sheet->setCellValue(Coordinate::stringFromColumnIndex($col) . $r, $cellText);
+                    $sheet->setCellValue(Coordinate::stringFromColumnIndex($col) . $writeRow, $ratingText);
                     $col++;
                 }
             }
 
-            // Scores (as raw number like frontend shows)
+            // Scores
             $sid = (string) ($storeSummary['store_id'] ?? '');
-
             $scoreWithoutAuto = $scoreData[$sid]['score_without_auto_fail'] ?? null;
             $scoreWithAuto    = $scoreData[$sid]['score_with_auto_fail'] ?? null;
 
-            $sheet->setCellValue($swLetter . $r, is_numeric($scoreWithoutAuto) ? $scoreWithoutAuto : null);
-            $sheet->setCellValue($stLetter . $r, is_numeric($scoreWithAuto) ? $scoreWithAuto : null);
+            // Keep numeric; previous design often percent-formatted, but numeric stays correct either way.
+            $sheet->setCellValue($swLetter . $writeRow, is_numeric($scoreWithoutAuto) ? (float) $scoreWithoutAuto : null);
+            $sheet->setCellValue($stLetter . $writeRow, is_numeric($scoreWithAuto) ? (float) $scoreWithAuto : null);
 
-            $r++;
+            // Notes column restored (aggregated notes per visible entity)
+            $notesParts = [];
+            foreach ($categoryGroups as $group) {
+                foreach ($group['entities'] as $entity) {
+                    $entityId = $entity->id;
+                    $entityData = $storeSummary['entities'][$entityId] ?? null;
+
+                    $notes = $entityData['notes'] ?? [];
+                    if (!is_array($notes)) $notes = [];
+
+                    $notes = collect($notes)
+                        ->filter(fn($n) => is_string($n) && trim($n) !== '')
+                        ->map(fn($n) => preg_replace("/\r\n|\r|\n/", ' ', trim($n)))
+                        ->values()
+                        ->all();
+
+                    if (count($notes) > 0) {
+                        $notesParts[] = (string) $entity->entity_label . ': ' . implode(' | ', $notes);
+                    }
+                }
+            }
+
+            $notesText = count($notesParts) ? implode(', ', $notesParts) : '-';
+            $sheet->setCellValue($notesLetter . $writeRow, $notesText);
+
+            $writeRow++;
         }
 
-        $lastDataRow = max($rowData, $r - 1);
+        $lastDataRow = max($rowData, $writeRow - 1);
 
-        // Styling (not important for matching, but keeps it readable)
+        // Center everything (except Notes)
         $sheet->getStyle("A1:{$lastHeaderLetter}{$lastDataRow}")->applyFromArray([
             'alignment' => [
                 'horizontal' => Alignment::HORIZONTAL_CENTER,
@@ -351,14 +404,53 @@ class CameraReportController extends Controller
             ],
         ]);
 
-        // Header styles
-        $sheet->getStyle("A1:{$lastHeaderLetter}2")->getFont()->setBold(true);
-        $sheet->getStyle("A1:{$lastHeaderLetter}2")->getFill()->setFillType(Fill::FILL_SOLID);
-        $sheet->getStyle("A1:{$lastHeaderLetter}2")->getFill()->getStartColor()->setRGB('F3F4F6');
+        // Notes column: left/top + wrap (previous design)
+        $sheet->getStyle("{$notesLetter}1:{$notesLetter}{$lastDataRow}")->applyFromArray([
+            'alignment' => [
+                'horizontal' => Alignment::HORIZONTAL_LEFT,
+                'vertical'   => Alignment::VERTICAL_TOP,
+                'wrapText'   => true,
+            ],
+        ]);
 
-        // Column widths
+        // Bold header
+        $sheet->getStyle("A1:{$lastHeaderLetter}3")->getFont()->setBold(true);
+        $sheet->getStyle("B1:{$lastHeaderLetter}1")->getFont()->setSize(12);
+
+        // Header fills for Store + Score + Notes
+        $sheet->getStyle('A1:A3')->getFill()->setFillType(Fill::FILL_SOLID);
+        $sheet->getStyle('A1:A3')->getFill()->getStartColor()->setRGB('F3F4F6');
+
+        $sheet->getStyle("{$swLetter}1:{$stLetter}3")->getFill()->setFillType(Fill::FILL_SOLID);
+        $sheet->getStyle("{$swLetter}1:{$stLetter}3")->getFill()->getStartColor()->setRGB('F3F4F6');
+
+        $sheet->getStyle("{$notesLetter}1:{$notesLetter}3")->getFill()->setFillType(Fill::FILL_SOLID);
+        $sheet->getStyle("{$notesLetter}1:{$notesLetter}3")->getFill()->getStartColor()->setRGB('F3F4F6');
+
+        // Category coloring across entity columns (headers + data)
+        foreach ($categoryRanges as $r) {
+            $startLetter = Coordinate::stringFromColumnIndex($r['start']);
+            $endLetter   = Coordinate::stringFromColumnIndex($r['end']);
+            $range = "{$startLetter}1:{$endLetter}{$lastDataRow}";
+
+            $sheet->getStyle($range)->getFill()->setFillType(Fill::FILL_SOLID);
+            $sheet->getStyle($range)->getFill()->getStartColor()->setRGB($r['color']);
+        }
+
+        // ✅ Keep your previous percent format for score columns (only data rows)
+        if ($lastDataRow >= $rowData) {
+            $sheet->getStyle("{$swLetter}{$rowData}:{$stLetter}{$lastDataRow}")
+                ->getNumberFormat()
+                ->setFormatCode('0.00%');
+        }
+
+        // Freeze headers
+        $sheet->freezePane("B{$rowData}");
+
+        // Widths
         $sheet->getColumnDimension('A')->setWidth(28);
 
+        // entity widths (count visible entity cols)
         $col = 2;
         $totalEntityCols = 0;
         foreach ($categoryGroups as $g) $totalEntityCols += count($g['entities']);
@@ -370,9 +462,12 @@ class CameraReportController extends Controller
 
         $sheet->getColumnDimension($swLetter)->setWidth(22);
         $sheet->getColumnDimension($stLetter)->setWidth(14);
+        $sheet->getColumnDimension($notesLetter)->setWidth(60);
 
-        // Freeze like a typical table
-        $sheet->freezePane("B{$rowData}");
+        // Row heights (previous design)
+        for ($rr = $rowData; $rr <= $lastDataRow; $rr++) {
+            $sheet->getRowDimension($rr)->setRowHeight(90);
+        }
 
         // Save
         $writer = new Xlsx($spreadsheet);
