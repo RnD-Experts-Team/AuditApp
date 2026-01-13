@@ -13,6 +13,7 @@ import {
   CheckCircle2,
   XCircle,
   Image as ImageIcon,
+  StickyNote,
 } from "lucide-react";
 
 interface ShowProps extends Record<string, unknown> {
@@ -34,7 +35,7 @@ export default function Show({ auth, audit }: PageProps<ShowProps>) {
   }
 
   const entitiesWithData = audit.camera_forms
-    ?.map((cf) => cf.entity)
+    ?.map((cf: any) => cf.entity)
     .filter(Boolean) as Entity[];
 
   const groupedEntities = entitiesWithData.reduce(
@@ -50,7 +51,7 @@ export default function Show({ auth, audit }: PageProps<ShowProps>) {
   );
 
   const getCameraFormForEntity = (entityId: number) => {
-    return audit.camera_forms?.find((cf) => cf.entity_id === entityId);
+    return audit.camera_forms?.find((cf: any) => cf.entity_id === entityId);
   };
 
   const handleDelete = () => {
@@ -101,6 +102,7 @@ export default function Show({ auth, audit }: PageProps<ShowProps>) {
           </div>
         </div>
 
+        {/* Summary cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="rounded-lg border bg-card p-6 hover:shadow-md transition-shadow">
             <div className="flex items-center gap-3">
@@ -165,11 +167,12 @@ export default function Show({ auth, audit }: PageProps<ShowProps>) {
           </div>
         </div>
 
+        {/* Results */}
         <div className="rounded-lg border bg-card overflow-hidden">
           <div className="bg-gradient-to-r from-primary/10 to-accent/10 px-6 py-4 border-b">
             <h3 className="text-lg font-semibold">Inspection Results</h3>
             <p className="text-sm text-muted-foreground mt-1">
-              All entities grouped by category (with optional images)
+              Entities grouped by category with multiple notes and attachments
             </p>
           </div>
 
@@ -195,10 +198,16 @@ export default function Show({ auth, audit }: PageProps<ShowProps>) {
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pl-11">
                     {categoryEntities.map((entity) => {
                       const cameraForm: any = getCameraFormForEntity(entity.id);
+
                       const hasRating = cameraForm?.rating?.label;
-                      const hasNote =
-                        cameraForm?.note && cameraForm.note.trim().length > 0;
-                      const hasImage = !!cameraForm?.image_url;
+                      const notes = cameraForm?.notes ?? [];
+                      const hasNotes = notes.length > 0;
+
+                      const totalAttachments = notes.reduce(
+                        (sum: number, n: any) =>
+                          sum + (n.attachments?.length ?? 0),
+                        0,
+                      );
 
                       return (
                         <div
@@ -216,7 +225,7 @@ export default function Show({ auth, audit }: PageProps<ShowProps>) {
                             )}
                           </div>
 
-                          <div className="mb-2 flex items-center gap-2">
+                          <div className="mb-2 flex flex-wrap items-center gap-2">
                             {hasRating ? (
                               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-primary text-primary-foreground">
                                 {cameraForm.rating.label}
@@ -227,29 +236,81 @@ export default function Show({ auth, audit }: PageProps<ShowProps>) {
                               </span>
                             )}
 
-                            {hasImage && (
+                            {hasNotes ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-muted text-muted-foreground">
+                                <StickyNote className="h-3 w-3" />
+                                {notes.length} Note
+                                {notes.length === 1 ? "" : "s"}
+                              </span>
+                            ) : null}
+
+                            {totalAttachments > 0 ? (
                               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-muted text-muted-foreground">
                                 <ImageIcon className="h-3 w-3" />
-                                Image
+                                {totalAttachments} Attachment
+                                {totalAttachments === 1 ? "" : "s"}
                               </span>
-                            )}
+                            ) : null}
                           </div>
 
-                          {hasNote && (
-                            <div className="mt-3 pt-3 border-t border-dashed">
-                              <p className="text-xs text-muted-foreground leading-relaxed">
-                                {cameraForm.note}
-                              </p>
-                            </div>
-                          )}
+                          {/* Notes */}
+                          {hasNotes ? (
+                            <div className="mt-3 pt-3 border-t border-dashed space-y-3">
+                              {notes.map((n: any, i: number) => {
+                                const noteText =
+                                  typeof n.note === "string"
+                                    ? n.note.trim()
+                                    : "";
+                                const atts = n.attachments ?? [];
+                                const hasText = noteText.length > 0;
+                                const hasAtts = atts.length > 0;
 
-                          {hasImage && (
+                                return (
+                                  <div
+                                    key={n.id ?? i}
+                                    className="rounded-md border bg-muted/10 p-3 space-y-2"
+                                  >
+                                    <div className="text-[11px] font-semibold text-muted-foreground">
+                                      Note #{i + 1}
+                                    </div>
+
+                                    {hasText ? (
+                                      <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap">
+                                        {n.note}
+                                      </p>
+                                    ) : (
+                                      <p className="text-xs text-muted-foreground italic">
+                                        (no text)
+                                      </p>
+                                    )}
+
+                                    {hasAtts ? (
+                                      <div className="space-y-2">
+                                        {atts.map((att: any) =>
+                                          att?.url ? (
+                                            <img
+                                              key={att.id}
+                                              src={att.url}
+                                              alt="Note attachment"
+                                              className="max-h-48 rounded-md border"
+                                            />
+                                          ) : null,
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <div className="text-xs text-muted-foreground italic">
+                                        (no attachments)
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
                             <div className="mt-3 pt-3 border-t border-dashed">
-                              <img
-                                src={cameraForm.image_url}
-                                alt="Entity attachment"
-                                className="max-h-48 rounded-md border"
-                              />
+                              <p className="text-xs text-muted-foreground italic">
+                                No notes or attachments.
+                              </p>
                             </div>
                           )}
                         </div>

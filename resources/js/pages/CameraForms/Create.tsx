@@ -13,14 +13,16 @@ interface CreateProps extends Record<string, unknown> {
 type DateRangeType = "daily" | "weekly";
 type ReportType = "main" | "secondary" | "";
 
+interface NoteFormData {
+  note: string;
+  image_files: File[];
+  image_preview_urls: string[];
+}
+
 interface EntityFormData {
   entity_id: number;
   rating_id: number | null;
-  note: string;
-
-  image_file: File | null;
-  image_preview_url: string | null;
-  remove_image: boolean;
+  notes: NoteFormData[];
 }
 
 function fileFromClipboard(e: React.ClipboardEvent): File | null {
@@ -38,12 +40,21 @@ function fileFromClipboard(e: React.ClipboardEvent): File | null {
           : item.type === "image/webp"
             ? "webp"
             : "jpg";
+
       return new File([blob], `pasted-${Date.now()}.${ext}`, {
         type: item.type,
       });
     }
   }
   return null;
+}
+
+function makeEmptyNote(): NoteFormData {
+  return {
+    note: "",
+    image_files: [],
+    image_preview_urls: [],
+  };
 }
 
 export default function Create({
@@ -88,10 +99,7 @@ export default function Create({
           next[entity.id] = {
             entity_id: entity.id,
             rating_id: null,
-            note: "",
-            image_file: null,
-            image_preview_url: null,
-            remove_image: false,
+            notes: [],
           };
         }
       });
@@ -139,47 +147,130 @@ export default function Create({
 
   const updateEntityData = (
     entityId: number,
-    field: keyof EntityFormData,
-    value: any,
+    patch: Partial<EntityFormData>,
   ) => {
-    setEntityData((prev) => ({
-      ...prev,
-      [entityId]: {
-        ...(prev[entityId] ?? {
+    setEntityData((prev) => {
+      const current: EntityFormData =
+        prev[entityId] ??
+        ({
           entity_id: entityId,
           rating_id: null,
-          note: "",
-          image_file: null,
-          image_preview_url: null,
-          remove_image: false,
-        }),
-        [field]: value,
-      },
-    }));
+          notes: [],
+        } as EntityFormData);
+
+      return {
+        ...prev,
+        [entityId]: {
+          ...current,
+          ...patch,
+        },
+      };
+    });
   };
 
-  const handlePickFile = (entityId: number, file: File | null) => {
-    const current = entityData[entityId];
-    if (current?.image_preview_url)
-      URL.revokeObjectURL(current.image_preview_url);
+  const updateNoteAt = (
+    entityId: number,
+    noteIndex: number,
+    patch: Partial<NoteFormData>,
+  ) => {
+    setEntityData((prev) => {
+      const current = prev[entityId];
+      if (!current) return prev;
 
-    if (!file) {
-      updateEntityData(entityId, "image_file", null);
-      updateEntityData(entityId, "image_preview_url", null);
-      return;
+      const notes = [...current.notes];
+      const existing = notes[noteIndex] ?? makeEmptyNote();
+
+      notes[noteIndex] = {
+        ...existing,
+        ...patch,
+      };
+
+      return {
+        ...prev,
+        [entityId]: {
+          ...current,
+          notes,
+        },
+      };
+    });
+  };
+
+  const addNote = (entityId: number) => {
+    const current = entityData[entityId] ?? {
+      entity_id: entityId,
+      rating_id: null,
+      notes: [],
+    };
+
+    updateEntityData(entityId, {
+      notes: [...current.notes, makeEmptyNote()],
+    });
+  };
+
+  const removeNote = (entityId: number, noteIndex: number) => {
+    const current = entityData[entityId];
+    if (!current) return;
+
+    const note = current.notes[noteIndex];
+    if (note?.image_preview_urls?.length) {
+      note.image_preview_urls.forEach((u) => URL.revokeObjectURL(u));
     }
 
-    updateEntityData(entityId, "image_file", file);
-    updateEntityData(entityId, "image_preview_url", URL.createObjectURL(file));
-    updateEntityData(entityId, "remove_image", false);
+    const nextNotes = current.notes.filter((_, i) => i !== noteIndex);
+    updateEntityData(entityId, { notes: nextNotes });
   };
 
-  const handlePaste = (entityId: number, e: React.ClipboardEvent) => {
+  const addFilesToNote = (
+    entityId: number,
+    noteIndex: number,
+    files: File[],
+  ) => {
+    if (!files.length) return;
+
+    const current = entityData[entityId];
+    if (!current) return;
+
+    const note = current.notes[noteIndex] ?? makeEmptyNote();
+    const newUrls = files.map((f) => URL.createObjectURL(f));
+
+    updateNoteAt(entityId, noteIndex, {
+      image_files: [...note.image_files, ...files],
+      image_preview_urls: [...note.image_preview_urls, ...newUrls],
+    });
+  };
+
+  const removeNewPreviewAt = (
+    entityId: number,
+    noteIndex: number,
+    fileIndex: number,
+  ) => {
+    const current = entityData[entityId];
+    if (!current) return;
+
+    const note = current.notes[noteIndex];
+    if (!note) return;
+
+    const url = note.image_preview_urls[fileIndex];
+    if (url) URL.revokeObjectURL(url);
+
+    updateNoteAt(entityId, noteIndex, {
+      image_files: note.image_files.filter((_, i) => i !== fileIndex),
+      image_preview_urls: note.image_preview_urls.filter(
+        (_, i) => i !== fileIndex,
+      ),
+    });
+  };
+
+  const handlePaste = (
+    entityId: number,
+    noteIndex: number,
+    e: React.ClipboardEvent,
+  ) => {
     const file = fileFromClipboard(e);
     if (!file) return;
 
     e.preventDefault();
-    handlePickFile(entityId, file);
+    addFilesToNote(entityId, noteIndex, [file]);
   };
 
   const handleSubmit: FormEventHandler = (e) => {
@@ -191,20 +282,34 @@ export default function Create({
     fd.append("store_id", storeId);
     fd.append("date", date);
 
-    // Only send filled entities (rating OR note OR image)
     const filled = Object.values(entityData).filter((x) => {
       const hasRating = x.rating_id !== null;
-      const hasNote = x.note && x.note.trim() !== "";
-      const hasImage = !!x.image_file;
-      return hasRating || hasNote || hasImage;
+
+      const hasNotesOrImages =
+        x.notes?.some((n) => {
+          const hasNoteText = n.note && n.note.trim() !== "";
+          const hasImages = n.image_files.length > 0;
+          return hasNoteText || hasImages;
+        }) ?? false;
+
+      return hasRating || hasNotesOrImages;
     });
 
     filled.forEach((x, idx) => {
       fd.append(`entities[${idx}][entity_id]`, String(x.entity_id));
-      if (x.rating_id !== null)
+      if (x.rating_id !== null) {
         fd.append(`entities[${idx}][rating_id]`, String(x.rating_id));
-      if (x.note) fd.append(`entities[${idx}][note]`, x.note);
-      if (x.image_file) fd.append(`entities[${idx}][image]`, x.image_file);
+      }
+
+      x.notes.forEach((n, j) => {
+        if (n.note) {
+          fd.append(`entities[${idx}][notes][${j}][note]`, n.note);
+        }
+
+        n.image_files.forEach((file, k) => {
+          fd.append(`entities[${idx}][notes][${j}][images][${k}]`, file);
+        });
+      });
     });
 
     router.post("/camera-forms", fd, {
@@ -229,7 +334,8 @@ export default function Create({
               Create Camera Form
             </h1>
             <p className="text-sm text-muted-foreground mt-1">
-              Create a new inspection and optionally attach images per entity
+              Create a new inspection with multiple notes per entity and
+              optional attachments per note (Ctrl+V supported)
             </p>
           </div>
           <a
@@ -264,7 +370,7 @@ export default function Create({
                 <label className="text-sm font-medium">Report Type</label>
                 <select
                   value={reportType}
-                  onChange={(e) => setReportType(e.target.value as ReportType)}
+                  onChange={(e) => setReportType(e.target.value as any)}
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <option value="">All Types</option>
@@ -336,105 +442,161 @@ export default function Create({
                   <div className="p-6 space-y-4">
                     {categoryEntities.map((entity) => {
                       const data = entityData[entity.id];
+                      const notes = data?.notes ?? [];
+
                       return (
                         <div
                           key={entity.id}
-                          className="grid grid-cols-1 lg:grid-cols-4 gap-4 p-4 rounded-md bg-muted/20"
+                          className="p-4 rounded-md bg-muted/20 space-y-4"
                         >
-                          <div className="flex items-center">
-                            <label className="text-sm font-medium">
-                              {entity.entity_label}
-                            </label>
-                          </div>
+                          <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+                            <div className="flex items-center">
+                              <label className="text-sm font-medium">
+                                {entity.entity_label}
+                              </label>
+                            </div>
 
-                          <div className="space-y-1">
-                            <select
-                              value={data?.rating_id ?? ""}
-                              onChange={(e) =>
-                                updateEntityData(
-                                  entity.id,
-                                  "rating_id",
-                                  e.target.value
-                                    ? Number(e.target.value)
-                                    : null,
-                                )
-                              }
-                              className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                            >
-                              <option value="">Select Rating</option>
-                              {ratings.map((rating) => (
-                                <option key={rating.id} value={rating.id}>
-                                  {rating.label}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
+                            <div className="space-y-1">
+                              <select
+                                value={data?.rating_id ?? ""}
+                                onChange={(e) =>
+                                  updateEntityData(entity.id, {
+                                    rating_id: e.target.value
+                                      ? Number(e.target.value)
+                                      : null,
+                                  })
+                                }
+                                className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                              >
+                                <option value="">Select Rating</option>
+                                {ratings.map((rating) => (
+                                  <option key={rating.id} value={rating.id}>
+                                    {rating.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
 
-                          <div className="space-y-1">
-                            <input
-                              type="text"
-                              placeholder="Note (optional)"
-                              value={data?.note ?? ""}
-                              onChange={(e) =>
-                                updateEntityData(
-                                  entity.id,
-                                  "note",
-                                  e.target.value,
-                                )
-                              }
-                              className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                            />
-                          </div>
-
-                          {/* Image box: paste here */}
-                          <div className="space-y-2">
-                            <div
-                              onPaste={(e) => handlePaste(entity.id, e)}
-                              className="rounded-md border border-dashed bg-background p-3"
-                              tabIndex={0}
-                            >
-                              <div className="text-xs text-muted-foreground">
-                                Click here then{" "}
-                                <span className="font-semibold">Ctrl+V</span> to
-                                paste an image, or choose a file:
-                              </div>
-
-                              <div className="mt-2 flex items-center gap-2">
-                                <input
-                                  type="file"
-                                  accept="image/*"
-                                  onChange={(e) =>
-                                    handlePickFile(
-                                      entity.id,
-                                      e.target.files?.[0] ?? null,
-                                    )
-                                  }
-                                  className="block w-full text-xs"
-                                />
-                                {data?.image_file && (
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      handlePickFile(entity.id, null)
-                                    }
-                                    className="text-xs rounded-md border px-2 py-1 hover:bg-accent"
-                                  >
-                                    Remove
-                                  </button>
-                                )}
-                              </div>
-
-                              {data?.image_preview_url && (
-                                <div className="mt-3">
-                                  <img
-                                    src={data.image_preview_url}
-                                    alt="Preview"
-                                    className="max-h-32 rounded-md border"
-                                  />
-                                </div>
-                              )}
+                            <div className="lg:col-span-2 flex justify-end">
+                              <button
+                                type="button"
+                                onClick={() => addNote(entity.id)}
+                                className="text-xs rounded-md border px-3 py-2 hover:bg-accent"
+                              >
+                                + Add Note / Attachment
+                              </button>
                             </div>
                           </div>
+
+                          {/* Notes blocks */}
+                          {notes.length ? (
+                            <div className="space-y-3">
+                              {notes.map((n, noteIndex) => (
+                                <div
+                                  key={noteIndex}
+                                  className="rounded-md border bg-background p-4 space-y-3"
+                                >
+                                  <div className="flex items-center justify-between gap-2">
+                                    <div className="text-xs font-semibold text-muted-foreground">
+                                      Note #{noteIndex + 1}
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        removeNote(entity.id, noteIndex)
+                                      }
+                                      className="text-xs rounded-md border px-2 py-1 hover:bg-accent"
+                                    >
+                                      Remove Note
+                                    </button>
+                                  </div>
+
+                                  <textarea
+                                    value={n.note}
+                                    onChange={(e) =>
+                                      updateNoteAt(entity.id, noteIndex, {
+                                        note: e.target.value,
+                                      })
+                                    }
+                                    placeholder="Write a note (optional)"
+                                    className="min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                  />
+
+                                  <div
+                                    onPaste={(e) =>
+                                      handlePaste(entity.id, noteIndex, e)
+                                    }
+                                    className="rounded-md border border-dashed bg-background p-3"
+                                    tabIndex={0}
+                                  >
+                                    <div className="text-xs text-muted-foreground">
+                                      Click here then{" "}
+                                      <span className="font-semibold">
+                                        Ctrl+V
+                                      </span>{" "}
+                                      to paste images, or choose files:
+                                    </div>
+
+                                    <div className="mt-2 flex items-center gap-2">
+                                      <input
+                                        type="file"
+                                        accept="image/*"
+                                        multiple
+                                        onChange={(e) => {
+                                          const files = Array.from(
+                                            e.target.files ?? [],
+                                          );
+                                          addFilesToNote(
+                                            entity.id,
+                                            noteIndex,
+                                            files,
+                                          );
+                                          e.currentTarget.value = "";
+                                        }}
+                                        className="block w-full text-xs"
+                                      />
+                                    </div>
+
+                                    {n.image_preview_urls.length ? (
+                                      <div className="mt-3 space-y-2">
+                                        {n.image_preview_urls.map(
+                                          (url, idx) => (
+                                            <div
+                                              key={url}
+                                              className="flex items-center gap-2"
+                                            >
+                                              <img
+                                                src={url}
+                                                alt="Preview"
+                                                className="max-h-24 rounded-md border"
+                                              />
+                                              <button
+                                                type="button"
+                                                onClick={() =>
+                                                  removeNewPreviewAt(
+                                                    entity.id,
+                                                    noteIndex,
+                                                    idx,
+                                                  )
+                                                }
+                                                className="text-xs rounded-md border px-2 py-1 hover:bg-accent"
+                                              >
+                                                Remove
+                                              </button>
+                                            </div>
+                                          ),
+                                        )}
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="text-xs text-muted-foreground">
+                              No notes yet. Use “Add Note / Attachment”.
+                            </div>
+                          )}
                         </div>
                       );
                     })}

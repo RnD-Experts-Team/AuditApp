@@ -134,13 +134,27 @@ export default function Index({
 
   const { summary, entities, total_stores, scoreData } = reportData;
 
-  // Group entities by category for header rows
+  // ✅ Only keep entities that have at least one value across ANY store
+  const visibleEntities = useMemo(() => {
+    if (!summary?.length) return [];
+
+    return entities.filter((entity) => {
+      return summary.some((storeSummary) => {
+        const entityData = storeSummary.entities?.[entity.id];
+        if (!entityData?.rating_counts?.length) return false;
+        return entityData.rating_counts.some((rc) => rc.count > 0);
+      });
+    });
+  }, [entities, summary]);
+
+  // ✅ Group *visible* entities by category for header rows
   const categoryGroups = useMemo(() => {
     const categories: Record<
       string,
       { id: number | null; label: string; entities: Entity[] }
     > = {};
-    entities.forEach((entity) => {
+
+    visibleEntities.forEach((entity) => {
       const catId = entity.category?.id ?? 0;
       const catLabel = entity.category?.label ?? "Uncategorized";
       if (!categories[catLabel]) {
@@ -148,8 +162,10 @@ export default function Index({
       }
       categories[catLabel].entities.push(entity);
     });
-    return Object.values(categories);
-  }, [entities]);
+
+    // ✅ remove empty categories (possible after filtering)
+    return Object.values(categories).filter((g) => g.entities.length > 0);
+  }, [visibleEntities]);
 
   return (
     <AuthenticatedLayout user={auth.user}>
@@ -295,7 +311,7 @@ export default function Index({
             </span>{" "}
             stores •{" "}
             <span className="font-semibold text-foreground">
-              {entities.length}
+              {visibleEntities.length}
             </span>{" "}
             entities
           </p>
@@ -312,6 +328,7 @@ export default function Index({
                 >
                   Store
                 </th>
+
                 {categoryGroups.map((group) => (
                   <th
                     key={group.label}
@@ -321,6 +338,7 @@ export default function Index({
                     {group.label}
                   </th>
                 ))}
+
                 <th rowSpan={2} className="text-center align-middle font-bold">
                   Score Without Auto Fail
                 </th>
@@ -347,7 +365,7 @@ export default function Index({
               {summary.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={entities.length + 3}
+                    colSpan={visibleEntities.length + 3}
                     className="h-24 text-center text-muted-foreground"
                   >
                     No data found. Try adjusting your filters.

@@ -20,10 +20,13 @@ class StoreCameraFormRequest extends FormRequest
 
             'entities.*.entity_id' => ['required', 'exists:entities,id'],
             'entities.*.rating_id' => ['nullable', 'exists:ratings,id'],
-            'entities.*.note' => ['nullable', 'string', 'max:65535'],
 
-            // ✅ NEW: optional image per entity row
-            'entities.*.image' => ['nullable', 'image', 'max:5120'], // 5MB
+            // notes array (optional)
+            'entities.*.notes' => ['nullable', 'array'],
+
+            'entities.*.notes.*.note' => ['nullable', 'string', 'max:65535'],
+            'entities.*.notes.*.images' => ['nullable', 'array'],
+            'entities.*.notes.*.images.*' => ['nullable', 'image', 'max:5120'],
         ];
     }
 
@@ -40,22 +43,26 @@ class StoreCameraFormRequest extends FormRequest
         $validator->after(function ($validator) {
             $hasFilledEntity = false;
 
-            foreach ($this->entities ?? [] as $entity) {
-                $hasRating = !empty($entity['rating_id']);
-                $hasNote   = !empty($entity['note']);
-                // file() works with nested arrays too
-                $hasImage  = $this->file('entities') !== null;
-
-                // We'll check image per index below more accurately
-            }
-
-            // Accurate check: rating OR note OR image must exist for at least one entity
             foreach (($this->entities ?? []) as $i => $entity) {
                 $hasRating = !empty($entity['rating_id']);
-                $hasNote   = !empty($entity['note']);
-                $hasImage  = $this->file("entities.$i.image") !== null;
 
-                if ($hasRating || $hasNote || $hasImage) {
+                $notes = $entity['notes'] ?? [];
+                $hasNotesOrImages = false;
+
+                if (is_array($notes)) {
+                    foreach ($notes as $j => $noteRow) {
+                        $noteText = isset($noteRow['note']) ? trim((string)$noteRow['note']) : '';
+                        $files = $this->file("entities.$i.notes.$j.images") ?? [];
+                        $hasImages = is_array($files) && count($files) > 0;
+
+                        if ($noteText !== '' || $hasImages) {
+                            $hasNotesOrImages = true;
+                            break;
+                        }
+                    }
+                }
+
+                if ($hasRating || $hasNotesOrImages) {
                     $hasFilledEntity = true;
                     break;
                 }

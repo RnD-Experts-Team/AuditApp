@@ -40,18 +40,37 @@ export interface Store {
   updated_at: string;
 }
 
+export interface CameraFormNoteAttachment {
+  id: number;
+  camera_form_note_id: number;
+  path: string;
+  url: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CameraFormNote {
+  id: number;
+  camera_form_id: number;
+  note: string | null;
+  attachments: CameraFormNoteAttachment[];
+  created_at: string;
+  updated_at: string;
+}
+
 export interface CameraForm {
   id: number;
   user_id: number | null;
   entity_id: number;
   audit_id: number | null;
   rating_id: number | null;
-  note: string | null;
+
   entity?: Entity;
   rating?: Rating;
   user?: User;
-  image_path: string | null;
-  image_url: string | null;
+
+  notes: CameraFormNote[];
+
   created_at: string;
   updated_at: string;
 }

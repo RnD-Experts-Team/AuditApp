@@ -5,7 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Support\Facades\Storage;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class CameraForm extends Model
 {
@@ -16,13 +16,16 @@ class CameraForm extends Model
         'entity_id',
         'audit_id',
         'rating_id',
-        'note',
-        'image_path',
     ];
 
-    protected $appends = [
-        'image_url',
+    protected $with = [
+        'notes',
     ];
+
+    public function notes(): HasMany
+    {
+        return $this->hasMany(CameraFormNote::class);
+    }
 
     public function user(): BelongsTo
     {
@@ -42,11 +45,5 @@ class CameraForm extends Model
     public function rating(): BelongsTo
     {
         return $this->belongsTo(Rating::class);
-    }
-
-    public function getImageUrlAttribute(): ?string
-    {
-        if (!$this->image_path) return null;
-        return Storage::disk('public')->url($this->image_path);
     }
 }
