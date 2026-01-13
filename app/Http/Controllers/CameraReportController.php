@@ -20,7 +20,6 @@ use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 
-
 class CameraReportController extends Controller
 {
     protected ScoringService $scoringService;
@@ -65,13 +64,13 @@ class CameraReportController extends Controller
     }
 
     /**
-     * Backend CSV export (includes notes, respects filters)
+     * Backend export (includes notes, respects filters)
      */
     public function export(Request $request): StreamedResponse
     {
         $user = Auth::user();
 
-        // 1) Build report data
+        // 1) Build report data EXACTLY like index()
         $reportData = $this->getReportData($request, $user);
 
         $summary   = $reportData['summary'];
@@ -98,7 +97,7 @@ class CameraReportController extends Controller
         $xlsxName = "{$baseName}.xlsx";
         $zipName  = "{$baseName}.zip";
 
-        // 2) Build XLSX file on disk
+        // 2) Build XLSX file on disk using the EXACT same data as index()
         $tmpXlsxPath = storage_path('app/tmp_' . Str::random(16) . '.xlsx');
         $this->buildReportXlsx($tmpXlsxPath, $summary, $entities, $scoreData);
 
@@ -152,8 +151,6 @@ class CameraReportController extends Controller
         ]);
     }
 
-
-
     private function getReportData(Request $request, $user): array
     {
         $storeId    = $request->input('store_id');
@@ -168,9 +165,7 @@ class CameraReportController extends Controller
         $userGroups = $user->isAdmin() ? null : $user->getGroupNumbers();
 
         /**
-         * -----------------------------
          * 1) Base query for ratings/scoring rows (NO notes join to avoid duplication)
-         * -----------------------------
          */
         $cameraFormsBase = DB::table('camera_forms')
             ->join('audits', 'camera_forms.audit_id', '=', 'audits.id')
@@ -197,7 +192,7 @@ class CameraReportController extends Controller
         if ($dateTo)   $cameraFormsBase->where('audits.date', '<=', $dateTo);
 
         /**
-         * Rating filter behavior (same as your original):
+         * Rating filter behavior:
          * - Only include STORES that have at least one row with rating_id = X
          * - BUT keep ALL rows (all ratings) for those stores
          */
@@ -216,20 +211,19 @@ class CameraReportController extends Controller
         $cameraForms = $cameraFormsBase->get();
 
         /**
-         * -----------------------------
-         * 2) Entities list (for columns)
-         * -----------------------------
+         * 2) Entities list (for columns) — THIS is the canonical order used by index()
          */
         $entitiesQuery = Entity::with('category');
         if ($reportType) {
             $entitiesQuery->where('report_type', $reportType);
         }
-        $entities = $entitiesQuery->orderBy('category_id')->orderBy('entity_label')->get();
+        $entities = $entitiesQuery
+            ->orderBy('category_id')
+            ->orderBy('entity_label')
+            ->get();
 
         /**
-         * -----------------------------
          * 3) Filtered stores for display
-         * -----------------------------
          */
         $storesQuery = Store::query();
 
@@ -246,10 +240,7 @@ class CameraReportController extends Controller
         $filteredStores = $storesQuery->orderBy('store')->get();
 
         /**
-         * -----------------------------
          * 4) Notes query (NEW schema)
-         *    We fetch notes separately and group by store+entity
-         * -----------------------------
          */
         $notesBase = DB::table('camera_form_notes')
             ->join('camera_forms', 'camera_forms.id', '=', 'camera_form_notes.camera_form_id')
@@ -285,9 +276,7 @@ class CameraReportController extends Controller
         }
 
         /**
-         * -----------------------------
          * 5) Group forms by store + date for scoring
-         * -----------------------------
          */
         $formsByStoreByDate = [];
         foreach ($cameraForms as $f) {
@@ -331,9 +320,7 @@ class CameraReportController extends Controller
             }
 
             /**
-             * -----------------------------
              * 6) Scoring logic (unchanged)
-             * -----------------------------
              */
             $perDateScoresWithoutAuto = [];
             $hasAnyWeeklyAutoFail = false;
@@ -399,7 +386,6 @@ class CameraReportController extends Controller
         ];
     }
 
-
     private function getReportAttachments(Request $request, $user)
     {
         $storeId    = $request->input('store_id');
@@ -436,7 +422,7 @@ class CameraReportController extends Controller
         if ($dateTo)   $q->where('audits.date', '<=', $dateTo);
 
         /**
-         * Same rating filter behavior you had:
+         * Same rating filter behavior:
          * include only stores that have at least one row rating_id = X
          * but keep all rows for those stores
          */
@@ -454,19 +440,29 @@ class CameraReportController extends Controller
         return $q->get();
     }
 
+    /**
+     * Build Excel using the EXACT same entity order as index().
+     * IMPORTANT: Do NOT re-sort entities here — that is what caused mismatch.
+     */
     private function buildReportXlsx(string $outputPath, $summary, $entities, array $scoreData): void
     {
-        $entities = collect($entities)->sortBy(function ($e) {
-            $catOrder = $e->category->sort_order ?? 999999;
-            $entOrder = $e->sort_order ?? 999999;
-            return sprintf('%06d-%06d-%s', $catOrder, $entOrder, (string) $e->entity_label);
-        })->values();
+        // Ensure $entities is a Collection (it is from getReportData)
+        $entities = collect($entities)->values();
 
-        $entitiesByCategory = $entities->groupBy(function ($e) {
-            return $e->category->label ?? 'Uncategorized';
-        });
+        /**
+         * Build categories in the SAME order as entities appear (first appearance order),
+         * so headers match index() ordering.
+         */
+        $entitiesByCategory = [];
+        foreach ($entities as $e) {
+            $catLabel = $e->category->label ?? 'Uncategorized';
+            if (!isset($entitiesByCategory[$catLabel])) {
+                $entitiesByCategory[$catLabel] = [];
+            }
+            $entitiesByCategory[$catLabel][] = $e;
+        }
 
-        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $spreadsheet = new Spreadsheet();
         $sheet = $spreadsheet->getActiveSheet();
         $sheet->setTitle('Camera Report');
 
@@ -502,7 +498,7 @@ class CameraReportController extends Controller
 
             foreach ($catEntities as $entity) {
                 $col = $currentColIndex;
-                $colLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($col);
+                $colLetter = Coordinate::stringFromColumnIndex($col);
 
                 $sheet->setCellValue($colLetter . $rowEntity, (string) $entity->entity_label);
                 $sheet->setCellValue($colLetter . $rowSub, 'Ratings');
@@ -512,8 +508,8 @@ class CameraReportController extends Controller
 
             $catEndCol = $currentColIndex - 1;
 
-            $startLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($catStartCol);
-            $endLetter   = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($catEndCol);
+            $startLetter = Coordinate::stringFromColumnIndex($catStartCol);
+            $endLetter   = Coordinate::stringFromColumnIndex($catEndCol);
 
             $sheet->setCellValue($startLetter . $rowCategory, (string) $categoryLabel);
             $sheet->mergeCells("{$startLetter}{$rowCategory}:{$endLetter}{$rowCategory}");
@@ -532,8 +528,8 @@ class CameraReportController extends Controller
         $scoreWithoutCol = $currentColIndex;
         $scoreWithCol    = $currentColIndex + 1;
 
-        $swLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($scoreWithoutCol);
-        $stLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($scoreWithCol);
+        $swLetter = Coordinate::stringFromColumnIndex($scoreWithoutCol);
+        $stLetter = Coordinate::stringFromColumnIndex($scoreWithCol);
 
         $sheet->setCellValue($swLetter . '1', 'Score Without Auto Fail');
         $sheet->mergeCells("{$swLetter}1:{$swLetter}3");
@@ -543,13 +539,13 @@ class CameraReportController extends Controller
 
         // Notes column AFTER Total Score
         $notesCol = $currentColIndex + 2;
-        $notesLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($notesCol);
+        $notesLetter = Coordinate::stringFromColumnIndex($notesCol);
 
         $sheet->setCellValue($notesLetter . $rowCategory, 'Notes');
         $sheet->mergeCells("{$notesLetter}{$rowCategory}:{$notesLetter}{$rowSub}");
 
         $lastHeaderCol = $notesCol;
-        $lastHeaderLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($lastHeaderCol);
+        $lastHeaderLetter = Coordinate::stringFromColumnIndex($lastHeaderCol);
 
         // ---- Data rows
         $writeRow = $rowData;
@@ -557,7 +553,7 @@ class CameraReportController extends Controller
         foreach ($summary as $storeSummary) {
             $sheet->setCellValue("A{$writeRow}", $storeSummary['store_name'] ?? '');
 
-            // Ratings per entity
+            // Ratings per entity (IN THE SAME ORDER AS INDEX)
             $col = 2; // B
             foreach ($entities as $entity) {
                 $entityData = $storeSummary['entities'][$entity->id] ?? null;
@@ -571,21 +567,21 @@ class CameraReportController extends Controller
                     if ($ratingText === '') $ratingText = '-';
                 }
 
-                $ratingCell = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($col) . $writeRow;
+                $ratingCell = Coordinate::stringFromColumnIndex($col) . $writeRow;
                 $sheet->setCellValue($ratingCell, $ratingText);
 
                 $col += 1;
             }
 
-            // Scores (write numeric fraction for percent formatting)
+            // Scores
             $sid = (string) ($storeSummary['store_id'] ?? '');
             $scoreWithoutAuto = $scoreData[$sid]['score_without_auto_fail'] ?? null;
             $scoreWithAuto    = $scoreData[$sid]['score_with_auto_fail'] ?? null;
 
-            $sheet->setCellValue($swLetter . $writeRow, is_numeric($scoreWithoutAuto) ? (float)$scoreWithoutAuto : null);
-            $sheet->setCellValue($stLetter . $writeRow, is_numeric($scoreWithAuto) ? (float)$scoreWithAuto : null);
+            $sheet->setCellValue($swLetter . $writeRow, is_numeric($scoreWithoutAuto) ? (float) $scoreWithoutAuto : null);
+            $sheet->setCellValue($stLetter . $writeRow, is_numeric($scoreWithAuto) ? (float) $scoreWithAuto : null);
 
-            // Notes single cell at the end
+            // Notes single cell at the end (derived from same notes arrays index uses)
             $notesParts = [];
             foreach ($entities as $entity) {
                 $entityData = $storeSummary['entities'][$entity->id] ?? null;
@@ -615,20 +611,20 @@ class CameraReportController extends Controller
          */
         $sheet->getStyle("A1:{$lastHeaderLetter}{$lastDataRow}")->applyFromArray([
             'alignment' => [
-                'horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER,
-                'vertical' => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER,
+                'horizontal' => Alignment::HORIZONTAL_CENTER,
+                'vertical' => Alignment::VERTICAL_CENTER,
                 'wrapText' => true,
             ],
             'borders' => [
-                'allBorders' => ['borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN],
+                'allBorders' => ['borderStyle' => Border::BORDER_THIN],
             ],
         ]);
 
-        // Notes column: not centered (left/top + wrap)
+        // Notes column: left/top + wrap
         $sheet->getStyle("{$notesLetter}1:{$notesLetter}{$lastDataRow}")->applyFromArray([
             'alignment' => [
-                'horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_LEFT,
-                'vertical'   => \PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_TOP,
+                'horizontal' => Alignment::HORIZONTAL_LEFT,
+                'vertical'   => Alignment::VERTICAL_TOP,
                 'wrapText'   => true,
             ],
         ]);
@@ -638,29 +634,26 @@ class CameraReportController extends Controller
         $sheet->getStyle("B1:{$lastHeaderLetter}1")->getFont()->setSize(12);
 
         // Header fills
-        $sheet->getStyle('A1:A3')->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID);
+        $sheet->getStyle('A1:A3')->getFill()->setFillType(Fill::FILL_SOLID);
         $sheet->getStyle('A1:A3')->getFill()->getStartColor()->setRGB('F3F4F6');
 
-        $sheet->getStyle("{$swLetter}1:{$stLetter}3")->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID);
+        $sheet->getStyle("{$swLetter}1:{$stLetter}3")->getFill()->setFillType(Fill::FILL_SOLID);
         $sheet->getStyle("{$swLetter}1:{$stLetter}3")->getFill()->getStartColor()->setRGB('F3F4F6');
 
-        $sheet->getStyle("{$notesLetter}1:{$notesLetter}3")->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID);
+        $sheet->getStyle("{$notesLetter}1:{$notesLetter}3")->getFill()->setFillType(Fill::FILL_SOLID);
         $sheet->getStyle("{$notesLetter}1:{$notesLetter}3")->getFill()->getStartColor()->setRGB('F3F4F6');
 
         // Category coloring across entity rating columns (headers + data)
         foreach ($categoryRanges as $r) {
-            $startLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($r['start']);
-            $endLetter   = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($r['end']);
+            $startLetter = Coordinate::stringFromColumnIndex($r['start']);
+            $endLetter   = Coordinate::stringFromColumnIndex($r['end']);
             $range = "{$startLetter}1:{$endLetter}{$lastDataRow}";
 
-            $sheet->getStyle($range)->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID);
+            $sheet->getStyle($range)->getFill()->setFillType(Fill::FILL_SOLID);
             $sheet->getStyle($range)->getFill()->getStartColor()->setRGB($r['color']);
         }
 
-        /**
-         * ✅ Format scores as percentage ONLY for data rows (after row 3)
-         * (Rows 1-3 are headers; leave them untouched)
-         */
+        // Format scores as percentage ONLY for data rows
         if ($lastDataRow >= $rowData) {
             $sheet->getStyle("{$swLetter}{$rowData}:{$stLetter}{$lastDataRow}")
                 ->getNumberFormat()
@@ -675,7 +668,7 @@ class CameraReportController extends Controller
 
         $col = 2;
         foreach ($entities as $entity) {
-            $sheet->getColumnDimension(\PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($col))->setWidth(18);
+            $sheet->getColumnDimension(Coordinate::stringFromColumnIndex($col))->setWidth(18);
             $col++;
         }
 
@@ -683,17 +676,13 @@ class CameraReportController extends Controller
         $sheet->getColumnDimension($stLetter)->setWidth(14);
         $sheet->getColumnDimension($notesLetter)->setWidth(60);
 
-        /**
-         * ✅ Row height:
-         * - Rows 1..3 unchanged
-         * - Rows 4..lastDataRow forced to 90
-         */
+        // Row height rows 4..lastDataRow forced to 90
         for ($r = $rowData; $r <= $lastDataRow; $r++) {
             $sheet->getRowDimension($r)->setRowHeight(90);
         }
 
         // Save
-        $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+        $writer = new Xlsx($spreadsheet);
         $writer->save($outputPath);
     }
 }
