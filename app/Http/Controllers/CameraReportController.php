@@ -248,16 +248,13 @@ class CameraReportController extends Controller
         $currentColIndex = 2; // B
 
         $palette = [
-            'D9E1F2',
-            'E2EFDA',
-            'FFF2CC',
-            'FCE4D6',
-            'E4DFEC',
-            'DDEBF7',
-            'F8CBAD',
-            'C6E0B4',
-            'FFD966',
-            'D0CECE'
+            '8DB4E2', // #8DB4E2
+            '92D050', // #92D050
+            'FABF8F', // #FABF8F
+            'D9D9D9', // #D9D9D9
+            'A6A6A6', // #A6A6A6
+            'EBE04F', // #EBE04F
+            'DA9694', // #DA9694
         ];
 
         $catIdx = 0;
