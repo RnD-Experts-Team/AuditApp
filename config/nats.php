@@ -10,8 +10,8 @@ return [
 
     'jetstream' => [
         'enabled' => true,
-        'stream' => env('NATS_AUTH_STREAM', 'AUTH_EVENTS'),
-        'subjects' => ['auth.v1.>'],
+        'stream' => env('NATS_QA_STREAM', 'QA_EVENTS'),
+        'subjects' => ['qa.v1.>'],
     ],
     /**
      * Add streams here as new projects appear.
