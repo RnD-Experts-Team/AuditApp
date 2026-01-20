@@ -9,6 +9,15 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
+/**
+ * JetStream consumer loop for Basis\Nats library.
+ *
+ * IMPORTANT:
+ * - Basis\Nats Consumer does NOT have ->pull().
+ * - Pull-style consumption is done via the Consumer Queue:
+ *     $queue = $consumer->getQueue();
+ *     $queue->setTimeout(...)->fetchAll($batch) or $queue->next()
+ */
 class JetStreamConsumer
 {
     public function __construct(
@@ -27,10 +36,14 @@ class JetStreamConsumer
         $timeoutMs = (int) config('nats.pull.timeout_ms', 2000);
         $sleepMs = (int) config('nats.pull.sleep_ms', 250);
 
+        // Basis queue timeout is in seconds (float). Convert ms -> seconds.
+        $timeoutSeconds = max(0.001, $timeoutMs / 1000);
+
         while (true) {
             foreach ($streams as $cfg) {
-                $this->consumeStream($cfg, $batch, $timeoutMs);
+                $this->consumeStream($cfg, $batch, $timeoutSeconds);
             }
+
             usleep(max(1, $sleepMs) * 1000);
         }
     }
@@ -38,7 +51,7 @@ class JetStreamConsumer
     /**
      * @param array{name:string,durable:string,filter_subject:string} $cfg
      */
-    private function consumeStream(array $cfg, int $batch, int $timeoutMs): void
+    private function consumeStream(array $cfg, int $batch, float $timeoutSeconds): void
     {
         $streamName = (string) ($cfg['name'] ?? '');
         $durable = (string) ($cfg['durable'] ?? '');
@@ -54,15 +67,30 @@ class JetStreamConsumer
             $api = $client->getApi();
             $stream = $api->getStream($streamName);
 
+            // Ensure durable consumer exists (or is created).
             $consumer = $this->ensureConsumer($stream, $durable, $filterSubject);
 
-            $messages = $consumer->pull($batch, $timeoutMs);
+            // ✅ Basis pull-consume: use Queue (NOT consumer->pull()).
+            $queue = $consumer->getQueue();
 
-            if (empty($messages)) return;
+            // Set a timeout for batch fetch (seconds).
+            $queue->setTimeout($timeoutSeconds);
+
+            // Fetch up to $batch messages (returns array of messages).
+            $messages = $queue->fetchAll($batch);
+
+            if (empty($messages)) {
+                return;
+            }
 
             foreach ($messages as $msg) {
                 $this->handleMessage($msg, $streamName, $durable);
             }
+
+            // NOTE:
+            // We intentionally do NOT unsubscribe here so we keep consuming.
+            // If you ever need to stop cleanly, call:
+            // $client->unsubscribe($queue);
         } catch (Throwable $e) {
             Log::error('JetStream consumer loop error', [
                 'stream' => $streamName,
@@ -72,19 +100,26 @@ class JetStreamConsumer
         }
     }
 
+    /**
+     * Ensures a durable consumer exists for the stream.
+     *
+     * Basis library pattern:
+     * - $stream->getConsumer('name') returns consumer object
+     * - configure it (subject filter) and call ->create()
+     * - If it already exists, create() is safe and will just ensure it exists.
+     */
     private function ensureConsumer($stream, string $durable, string $filterSubject)
     {
-        try {
-            return $stream->getConsumer($durable);
-        } catch (Throwable $e) {
-            return $stream->createConsumer([
-                'durable_name' => $durable,
-                'ack_policy' => 'explicit',
-                'deliver_policy' => 'all',
-                'max_ack_pending' => 20000,
-                'filter_subject' => $filterSubject,
-            ]);
-        }
+        $consumer = $stream->getConsumer($durable);
+
+        // Set filter subject to match your stream subjects.
+        // (In your stream you store auth.v1.> so this should match that.)
+        $consumer->getConfiguration()->setSubjectFilter($filterSubject);
+
+        // Create the consumer in JetStream if not exists (or ensure it exists).
+        $consumer->create();
+
+        return $consumer;
     }
 
     private function handleMessage($msg, string $streamName, string $durable): void
@@ -92,6 +127,7 @@ class JetStreamConsumer
         $raw = $this->extractBody($msg);
         $event = json_decode($raw, true);
 
+        // If it's not JSON, just ack and move on.
         if (!is_array($event)) {
             $this->ackSafe($msg);
             return;
@@ -169,6 +205,12 @@ class JetStreamConsumer
 
     private function extractBody($msg): string
     {
+        // Basis NATS Message usually has ->payload OR body accessors depending on type.
+        if (property_exists($msg, 'payload')) {
+            $b = $msg->payload;
+            return is_string($b) ? $b : (string) $b;
+        }
+
         if (method_exists($msg, 'getBody')) {
             $b = $msg->getBody();
             return is_string($b) ? $b : '';
@@ -189,16 +231,26 @@ class JetStreamConsumer
     private function ackSafe($msg): void
     {
         try {
-            if (method_exists($msg, 'ack')) $msg->ack();
+            if (method_exists($msg, 'ack')) {
+                $msg->ack();
+            }
         } catch (Throwable $e) {
+            // ignore
         }
     }
 
     private function nakSafe($msg): void
     {
         try {
-            if (method_exists($msg, 'nak')) $msg->nak();
+            // Basis uses nack(seconds) sometimes (see library examples).
+            if (method_exists($msg, 'nack')) {
+                // retry quickly (1 second) to avoid tight loops
+                $msg->nack(1);
+            } elseif (method_exists($msg, 'nak')) {
+                $msg->nak();
+            }
         } catch (Throwable $e) {
+            // ignore
         }
     }
 }
