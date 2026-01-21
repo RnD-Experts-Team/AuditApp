@@ -41,6 +41,9 @@ class JetStreamConsumer
         $timeoutMs = (int) config('nats.pull.timeout_ms', 2000);
         $sleepMs   = (int) config('nats.pull.sleep_ms', 250);
 
+        // Basis Queue timeout uses seconds (float). Convert ms -> seconds.
+        $timeoutSeconds = max(0.001, $timeoutMs / 1000);
+
         // IMPORTANT: create ONE client and reuse it forever.
         $this->client = $this->factory->make();
 
@@ -52,6 +55,7 @@ class JetStreamConsumer
             ], $streams),
             'batch' => $batch,
             'timeout_ms' => $timeoutMs,
+            'timeout_seconds' => $timeoutSeconds,
             'sleep_ms' => $sleepMs,
             'max_processing_attempts' => self::MAX_PROCESSING_ATTEMPTS,
         ]);
@@ -59,7 +63,7 @@ class JetStreamConsumer
         while (true) {
             try {
                 foreach ($streams as $cfg) {
-                    $this->consumeStream($cfg, $batch, $timeoutMs);
+                    $this->consumeStream($cfg, $batch, $timeoutSeconds);
                 }
             } catch (Throwable $e) {
                 Log::error('JetStream consumer outer loop error', [
@@ -75,7 +79,7 @@ class JetStreamConsumer
     /**
      * @param array{name:string,durable:string,filter_subject:string} $cfg
      */
-    private function consumeStream(array $cfg, int $batch, int $timeoutMs): void
+    private function consumeStream(array $cfg, int $batch, float $timeoutSeconds): void
     {
         $streamName    = (string) ($cfg['name'] ?? '');
         $durable       = (string) ($cfg['durable'] ?? '');
@@ -99,20 +103,23 @@ class JetStreamConsumer
 
             $consumer = $this->ensureConsumer($stream, $durable, $filterSubject);
 
-            // You are using pull mode
-            $messages = $consumer->pull($batch, $timeoutMs);
+            // ✅ BASIS pull-mode: use queue (NOT Consumer::pull()).
+            $queue = $consumer->getQueue();
+            $queue->setTimeout($timeoutSeconds);
+
+            $messages = $queue->fetchAll($batch);
 
             if (empty($messages)) {
-                Log::debug('JetStream pull returned no messages', [
+                Log::debug('JetStream fetchAll returned no messages', [
                     'stream' => $streamName,
                     'durable' => $durable,
                     'batch' => $batch,
-                    'timeout_ms' => $timeoutMs,
+                    'timeout_seconds' => $timeoutSeconds,
                 ]);
                 return;
             }
 
-            Log::debug('JetStream pull received messages', [
+            Log::debug('JetStream fetchAll received messages', [
                 'stream' => $streamName,
                 'durable' => $durable,
                 'count' => count($messages),
@@ -137,6 +144,9 @@ class JetStreamConsumer
         try {
             $c = $stream->getConsumer($durable);
 
+            // IMPORTANT: ensure filter is what you expect.
+            // Some versions allow setting config before create; but getConsumer returns existing.
+            // We'll log what we *expect* here.
             Log::debug('JetStream consumer ensured (existing)', [
                 'durable' => $durable,
                 'filter_subject' => $filterSubject,
@@ -151,10 +161,10 @@ class JetStreamConsumer
             ]);
 
             $c = $stream->createConsumer([
-                'durable_name'   => $durable,
-                'ack_policy'     => 'explicit',
-                'deliver_policy' => 'all',
-                'filter_subject' => $filterSubject,
+                'durable_name'    => $durable,
+                'ack_policy'      => 'explicit',
+                'deliver_policy'  => 'all',
+                'filter_subject'  => $filterSubject,
                 'max_ack_pending' => 20000,
             ]);
 
@@ -214,7 +224,7 @@ class JetStreamConsumer
                 ->first();
 
             if (!$inbox) {
-                $inbox = EventInbox::create([
+                EventInbox::create([
                     'event_id' => $eventId,
                     'subject' => $subject,
                     'source' => $source ?: null,
@@ -227,7 +237,6 @@ class JetStreamConsumer
                     'last_error' => null,
                 ]);
 
-                // lock it after creation in the same tx (safe pattern)
                 $inbox = EventInbox::query()
                     ->where('event_id', $eventId)
                     ->lockForUpdate()
@@ -244,7 +253,7 @@ class JetStreamConsumer
                     'consumer' => $durable,
                     'event_id' => $eventId,
                     'subject' => $subject,
-                    'attempts' => $inbox->attempts,
+                    'attempts' => (int) $inbox->attempts,
                     'parked_at' => $inbox->parked_at?->toDateTimeString(),
                 ]);
 
@@ -318,7 +327,7 @@ class JetStreamConsumer
                             'consumer' => $durable,
                             'event_id' => $eventId,
                             'subject' => $subject,
-                            'attempts' => $locked->attempts,
+                            'attempts' => (int) $locked->attempts,
                             'error' => $e->getMessage(),
                         ]);
 
@@ -336,7 +345,7 @@ class JetStreamConsumer
                         'consumer' => $durable,
                         'event_id' => $eventId,
                         'subject' => $subject,
-                        'attempts' => $locked->attempts,
+                        'attempts' => (int) $locked->attempts,
                         'max_attempts' => self::MAX_PROCESSING_ATTEMPTS,
                         'error' => $e->getMessage(),
                     ]);
@@ -344,7 +353,6 @@ class JetStreamConsumer
                     return;
                 }
             } catch (Throwable $inner) {
-                // If DB update itself fails, rollback and NAK (best effort)
                 DB::rollBack();
                 $this->nakSafe($msg);
 
@@ -360,7 +368,6 @@ class JetStreamConsumer
                 return;
             }
 
-            // Fallback: if somehow we didn't return above
             DB::rollBack();
             $this->nakSafe($msg);
 
@@ -376,6 +383,11 @@ class JetStreamConsumer
 
     private function extractBody($msg): string
     {
+        if (property_exists($msg, 'payload')) {
+            $b = $msg->payload;
+            return is_string($b) ? $b : (string) $b;
+        }
+
         if (method_exists($msg, 'getBody')) {
             $b = $msg->getBody();
             return is_string($b) ? $b : '';
@@ -407,6 +419,12 @@ class JetStreamConsumer
     private function nakSafe($msg): void
     {
         try {
+            // Some libs use nack(), some nak(). We keep nak() since that's what your code used.
+            if (method_exists($msg, 'nack')) {
+                $msg->nack(1);
+                return;
+            }
+
             if (method_exists($msg, 'nak')) {
                 $msg->nak();
             }
