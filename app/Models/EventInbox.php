@@ -16,11 +16,14 @@ class EventInbox extends Model
         'consumer',
         'payload',
         'processed_at',
-        'last_error'
+        'attempts',
+        'parked_at',
+        'last_error',
     ];
 
     protected $casts = [
         'payload' => 'array',
         'processed_at' => 'datetime',
+        'parked_at' => 'datetime',
     ];
 }

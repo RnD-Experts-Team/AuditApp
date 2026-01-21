@@ -26,6 +26,8 @@ return new class extends Migration {
             $table->json('payload');
 
             $table->timestamp('processed_at')->nullable()->index();
+            $table->unsignedInteger('attempts')->default(0);
+            $table->timestamp('parked_at')->nullable()->index();
             $table->text('last_error')->nullable();
 
             $table->timestamps();

@@ -13,8 +13,8 @@ use Throwable;
 class JetStreamConsumer
 {
     /**
-     * After this many deliveries for the same message, we ACK it and park it in event_inbox with last_error.
-     * This prevents infinite redelivery storms when a handler is broken or ordering is wrong.
+     * After this many failures for the same event_id, we ACK it and park it.
+     * This guarantees "stop trying" for that event_id.
      */
     private const MAX_PROCESSING_ATTEMPTS = 5;
 
@@ -86,9 +86,7 @@ class JetStreamConsumer
         }
 
         if (!$this->client) {
-            // Safety: should never happen, but prevents null usage.
             $this->client = $this->factory->make();
-
             Log::warning('JetStream consumer client was null; recreated client', [
                 'stream' => $streamName,
                 'durable' => $durable,
@@ -101,8 +99,7 @@ class JetStreamConsumer
 
             $consumer = $this->ensureConsumer($stream, $durable, $filterSubject);
 
-            // NOTE: your Basis library version did not support Consumer::pull() earlier.
-            // You said you fixed it now; keeping your call here as requested.
+            // You are using pull mode
             $messages = $consumer->pull($batch, $timeoutMs);
 
             if (empty($messages)) {
@@ -119,8 +116,6 @@ class JetStreamConsumer
                 'stream' => $streamName,
                 'durable' => $durable,
                 'count' => count($messages),
-                'batch' => $batch,
-                'timeout_ms' => $timeoutMs,
             ]);
 
             foreach ($messages as $msg) {
@@ -130,13 +125,9 @@ class JetStreamConsumer
             Log::error('JetStream consumer loop error', [
                 'stream' => $streamName,
                 'durable' => $durable,
-                'filter_subject' => $filterSubject,
-                'batch' => $batch,
-                'timeout_ms' => $timeoutMs,
                 'error' => $e->getMessage(),
             ]);
 
-            // Backoff slightly on stream errors to avoid hot-spin
             usleep(self::ERROR_BACKOFF_MS * 1000);
         }
     }
@@ -159,34 +150,17 @@ class JetStreamConsumer
                 'error' => $e->getMessage(),
             ]);
 
-            // Fallback: create consumer if missing.
-            // NOTE: Prefer creating via NATS CLI so you can control max_deliver/backoff cleanly.
             $c = $stream->createConsumer([
-                'durable_name'      => $durable,
-                'ack_policy'        => 'explicit',
-                'deliver_policy'    => 'all',
-                'filter_subject'    => $filterSubject,
-
-                // IMPORTANT: don’t allow endless pending acks
-                'max_ack_pending'   => 2000,
-
-                // IMPORTANT: stop infinite redelivery
-                'max_deliver'       => self::MAX_PROCESSING_ATTEMPTS,
-
-                // Keep retry timing reasonable
-                'ack_wait'          => 30, // seconds (library may accept seconds)
-
-                // Pull tuning (server-side defaults if ignored by library)
-                'max_waiting'       => 128,
+                'durable_name'   => $durable,
+                'ack_policy'     => 'explicit',
+                'deliver_policy' => 'all',
+                'filter_subject' => $filterSubject,
+                'max_ack_pending' => 20000,
             ]);
 
             Log::info('JetStream consumer created', [
                 'durable' => $durable,
                 'filter_subject' => $filterSubject,
-                'max_ack_pending' => 2000,
-                'max_deliver' => self::MAX_PROCESSING_ATTEMPTS,
-                'ack_wait_seconds' => 30,
-                'max_waiting' => 128,
             ]);
 
             return $c;
@@ -195,101 +169,89 @@ class JetStreamConsumer
 
     private function handleMessage($msg, string $streamName, string $durable): void
     {
-        // If NATS has already tried delivering this message too many times, ACK + park it.
-        $deliveries = $this->getNumDelivered($msg);
-
         $raw = $this->extractBody($msg);
         $event = json_decode($raw, true);
 
-        $eventId = is_array($event) ? (string) ($event['id'] ?? '') : '';
-        $subject = is_array($event) ? (string) ($event['subject'] ?? $event['type'] ?? '') : '';
-
-        Log::debug('JetStream message received', [
-            'stream' => $streamName,
-            'consumer' => $durable,
-            'deliveries' => $deliveries,
-            'event_id' => $eventId !== '' ? $eventId : null,
-            'subject' => $subject !== '' ? $subject : null,
-        ]);
-
-        if ($deliveries >= self::MAX_PROCESSING_ATTEMPTS) {
-            // Best effort: store why it got parked
-            if ($eventId !== '') {
-                try {
-                    EventInbox::query()->updateOrCreate(
-                        ['event_id' => $eventId],
-                        [
-                            'subject'     => $subject !== '' ? $subject : 'unknown',
-                            'source'      => is_array($event) ? (($event['source'] ?? null) ?: null) : null,
-                            'stream'      => $streamName,
-                            'consumer'    => $durable,
-                            'payload'     => is_array($event) ? $event : ['raw' => $raw],
-                            'processed_at' => null,
-                            'last_error'  => "Parked after {$deliveries} deliveries (poison message / handler failing).",
-                        ]
-                    );
-                } catch (Throwable $ignored) {
-                    Log::warning('Failed to write poison message into inbox while parking', [
-                        'stream' => $streamName,
-                        'consumer' => $durable,
-                        'event_id' => $eventId,
-                        'subject' => $subject,
-                        'error' => $ignored->getMessage(),
-                    ]);
-                }
-            }
-
-            $this->ackSafe($msg);
-
-            Log::warning('Poison message parked (max deliveries reached) - ACKed', [
-                'stream' => $streamName,
-                'consumer' => $durable,
-                'deliveries' => $deliveries,
-                'event_id' => $eventId !== '' ? $eventId : null,
-                'subject' => $subject !== '' ? $subject : null,
-            ]);
-
-            return;
-        }
-
         if (!is_array($event)) {
             $this->ackSafe($msg);
-
             Log::warning('Non-JSON message ACKed (ignored)', [
                 'stream' => $streamName,
                 'consumer' => $durable,
-                'deliveries' => $deliveries,
                 'raw_preview' => mb_substr($raw, 0, 200),
             ]);
-
             return;
         }
 
+        $eventId = (string) ($event['id'] ?? '');
+        $subject = (string) ($event['subject'] ?? $event['type'] ?? '');
         $source  = (string) ($event['source'] ?? '');
 
         if ($eventId === '' || $subject === '') {
             $this->ackSafe($msg);
-
             Log::warning('Invalid event envelope ACKed (missing id/subject)', [
                 'stream' => $streamName,
                 'consumer' => $durable,
-                'deliveries' => $deliveries,
                 'event_id' => $eventId !== '' ? $eventId : null,
                 'subject' => $subject !== '' ? $subject : null,
-                'source' => $source !== '' ? $source : null,
             ]);
-
             return;
         }
+
+        Log::debug('Event received', [
+            'stream' => $streamName,
+            'consumer' => $durable,
+            'event_id' => $eventId,
+            'subject' => $subject,
+        ]);
 
         DB::beginTransaction();
 
         try {
+            // Ensure inbox row exists + lock it (idempotency + attempt counter)
             $inbox = EventInbox::query()
                 ->where('event_id', $eventId)
                 ->lockForUpdate()
                 ->first();
 
+            if (!$inbox) {
+                $inbox = EventInbox::create([
+                    'event_id' => $eventId,
+                    'subject' => $subject,
+                    'source' => $source ?: null,
+                    'stream' => $streamName,
+                    'consumer' => $durable,
+                    'payload' => $event,
+                    'processed_at' => null,
+                    'attempts' => 0,
+                    'parked_at' => null,
+                    'last_error' => null,
+                ]);
+
+                // lock it after creation in the same tx (safe pattern)
+                $inbox = EventInbox::query()
+                    ->where('event_id', $eventId)
+                    ->lockForUpdate()
+                    ->first();
+            }
+
+            // If it was already parked, never retry again.
+            if ($inbox && $inbox->parked_at) {
+                DB::commit();
+                $this->ackSafe($msg);
+
+                Log::warning('Event is parked - ACKed and skipped', [
+                    'stream' => $streamName,
+                    'consumer' => $durable,
+                    'event_id' => $eventId,
+                    'subject' => $subject,
+                    'attempts' => $inbox->attempts,
+                    'parked_at' => $inbox->parked_at?->toDateTimeString(),
+                ]);
+
+                return;
+            }
+
+            // If already processed, ACK and exit.
             if ($inbox && $inbox->processed_at) {
                 DB::commit();
                 $this->ackSafe($msg);
@@ -304,31 +266,10 @@ class JetStreamConsumer
                 return;
             }
 
-            if (!$inbox) {
-                $inbox = EventInbox::create([
-                    'event_id'      => $eventId,
-                    'subject'       => $subject,
-                    'source'        => $source ?: null,
-                    'stream'        => $streamName,
-                    'consumer'      => $durable,
-                    'payload'       => $event,
-                    'processed_at'  => null,
-                    'last_error'    => null,
-                ]);
-
-                Log::debug('Event inbox row created', [
-                    'stream' => $streamName,
-                    'consumer' => $durable,
-                    'event_id' => $eventId,
-                    'subject' => $subject,
-                ]);
-            }
-
+            // Route and execute
             $handlerClass = $this->router->resolve($subject);
 
-            Log::debug('Resolved handler for subject', [
-                'stream' => $streamName,
-                'consumer' => $durable,
+            Log::debug('Resolved handler', [
                 'event_id' => $eventId,
                 'subject' => $subject,
                 'handler' => $handlerClass,
@@ -350,70 +291,87 @@ class JetStreamConsumer
                 'consumer' => $durable,
                 'event_id' => $eventId,
                 'subject' => $subject,
-                'deliveries' => $deliveries,
             ]);
         } catch (Throwable $e) {
-            DB::rollBack();
-
-            // Store the failure; the message will retry until MAX_PROCESSING_ATTEMPTS then get parked.
+            // We failed processing: increment attempts and decide ACK vs NAK
             try {
-                EventInbox::query()->where('event_id', $eventId)->update([
-                    'last_error' => $e->getMessage(),
-                ]);
-            } catch (Throwable $ignored) {
-                Log::warning('Failed to update inbox last_error after handler failure', [
+                /** @var EventInbox|null $locked */
+                $locked = EventInbox::query()
+                    ->where('event_id', $eventId)
+                    ->lockForUpdate()
+                    ->first();
+
+                if ($locked) {
+                    $locked->attempts = (int) $locked->attempts + 1;
+                    $locked->last_error = $e->getMessage();
+
+                    // If attempts exceeded, PARK + ACK (stop retrying forever)
+                    if ($locked->attempts >= self::MAX_PROCESSING_ATTEMPTS) {
+                        $locked->parked_at = now();
+                        $locked->save();
+
+                        DB::commit();
+                        $this->ackSafe($msg);
+
+                        Log::error('Event parked after max attempts - ACKed (stop retrying)', [
+                            'stream' => $streamName,
+                            'consumer' => $durable,
+                            'event_id' => $eventId,
+                            'subject' => $subject,
+                            'attempts' => $locked->attempts,
+                            'error' => $e->getMessage(),
+                        ]);
+
+                        return;
+                    }
+
+                    // Still allowed to retry
+                    $locked->save();
+
+                    DB::commit();
+                    $this->nakSafe($msg);
+
+                    Log::error('Event failed - NAKed (will retry)', [
+                        'stream' => $streamName,
+                        'consumer' => $durable,
+                        'event_id' => $eventId,
+                        'subject' => $subject,
+                        'attempts' => $locked->attempts,
+                        'max_attempts' => self::MAX_PROCESSING_ATTEMPTS,
+                        'error' => $e->getMessage(),
+                    ]);
+
+                    return;
+                }
+            } catch (Throwable $inner) {
+                // If DB update itself fails, rollback and NAK (best effort)
+                DB::rollBack();
+                $this->nakSafe($msg);
+
+                Log::error('Event failed and attempts could not be updated - NAKed', [
                     'stream' => $streamName,
                     'consumer' => $durable,
                     'event_id' => $eventId,
                     'subject' => $subject,
-                    'error' => $ignored->getMessage(),
+                    'original_error' => $e->getMessage(),
+                    'attempts_update_error' => $inner->getMessage(),
                 ]);
+
+                return;
             }
 
+            // Fallback: if somehow we didn't return above
+            DB::rollBack();
             $this->nakSafe($msg);
 
-            Log::error('Event processing failed - NAKed', [
+            Log::error('Event processing failed - NAKed (fallback)', [
                 'stream' => $streamName,
                 'consumer' => $durable,
                 'event_id' => $eventId,
                 'subject' => $subject,
-                'deliveries' => $deliveries,
                 'error' => $e->getMessage(),
             ]);
         }
-    }
-
-    /**
-     * NATS JetStream adds delivery count in headers (typically Nats-Num-Delivered).
-     * We read it defensively so it works even if the PHP library changes.
-     */
-    private function getNumDelivered($msg): int
-    {
-        try {
-            $headers = null;
-
-            if (method_exists($msg, 'getHeaders')) {
-                $headers = $msg->getHeaders();
-            } elseif (property_exists($msg, 'headers')) {
-                $headers = $msg->headers;
-            }
-
-            if (is_array($headers)) {
-                foreach (['Nats-Num-Delivered', 'NATS-Num-Delivered', 'nats-num-delivered'] as $k) {
-                    if (isset($headers[$k])) {
-                        $v = $headers[$k];
-                        if (is_array($v)) $v = $v[0] ?? null;
-                        if (is_string($v) && ctype_digit($v)) return (int) $v;
-                        if (is_int($v)) return $v;
-                    }
-                }
-            }
-        } catch (Throwable $e) {
-            // ignore
-        }
-
-        // If we can’t read it, return 0 so it behaves like “first attempt”.
-        return 0;
     }
 
     private function extractBody($msg): string
@@ -442,9 +400,7 @@ class JetStreamConsumer
                 $msg->ack();
             }
         } catch (Throwable $e) {
-            Log::warning('ACK failed', [
-                'error' => $e->getMessage(),
-            ]);
+            Log::warning('ACK failed', ['error' => $e->getMessage()]);
         }
     }
 
@@ -455,9 +411,7 @@ class JetStreamConsumer
                 $msg->nak();
             }
         } catch (Throwable $e) {
-            Log::warning('NAK failed', [
-                'error' => $e->getMessage(),
-            ]);
+            Log::warning('NAK failed', ['error' => $e->getMessage()]);
         }
     }
 }
