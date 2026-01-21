@@ -44,6 +44,18 @@ class JetStreamConsumer
         // IMPORTANT: create ONE client and reuse it forever.
         $this->client = $this->factory->make();
 
+        Log::info('JetStream consumer started', [
+            'streams' => array_map(fn($s) => [
+                'name' => $s['name'] ?? null,
+                'durable' => $s['durable'] ?? null,
+                'filter_subject' => $s['filter_subject'] ?? null,
+            ], $streams),
+            'batch' => $batch,
+            'timeout_ms' => $timeoutMs,
+            'sleep_ms' => $sleepMs,
+            'max_processing_attempts' => self::MAX_PROCESSING_ATTEMPTS,
+        ]);
+
         while (true) {
             try {
                 foreach ($streams as $cfg) {
@@ -76,20 +88,40 @@ class JetStreamConsumer
         if (!$this->client) {
             // Safety: should never happen, but prevents null usage.
             $this->client = $this->factory->make();
+
+            Log::warning('JetStream consumer client was null; recreated client', [
+                'stream' => $streamName,
+                'durable' => $durable,
+            ]);
         }
 
         try {
             $api    = $this->client->getApi();
             $stream = $api->getStream($streamName);
 
-            // If you created the consumer via CLI, this will just fetch it.
-            // If not, it will create it with sane defaults (but I recommend CLI).
             $consumer = $this->ensureConsumer($stream, $durable, $filterSubject);
 
+            // NOTE: your Basis library version did not support Consumer::pull() earlier.
+            // You said you fixed it now; keeping your call here as requested.
             $messages = $consumer->pull($batch, $timeoutMs);
+
             if (empty($messages)) {
+                Log::debug('JetStream pull returned no messages', [
+                    'stream' => $streamName,
+                    'durable' => $durable,
+                    'batch' => $batch,
+                    'timeout_ms' => $timeoutMs,
+                ]);
                 return;
             }
+
+            Log::debug('JetStream pull received messages', [
+                'stream' => $streamName,
+                'durable' => $durable,
+                'count' => count($messages),
+                'batch' => $batch,
+                'timeout_ms' => $timeoutMs,
+            ]);
 
             foreach ($messages as $msg) {
                 $this->handleMessage($msg, $streamName, $durable);
@@ -98,6 +130,9 @@ class JetStreamConsumer
             Log::error('JetStream consumer loop error', [
                 'stream' => $streamName,
                 'durable' => $durable,
+                'filter_subject' => $filterSubject,
+                'batch' => $batch,
+                'timeout_ms' => $timeoutMs,
                 'error' => $e->getMessage(),
             ]);
 
@@ -109,11 +144,24 @@ class JetStreamConsumer
     private function ensureConsumer($stream, string $durable, string $filterSubject)
     {
         try {
-            return $stream->getConsumer($durable);
+            $c = $stream->getConsumer($durable);
+
+            Log::debug('JetStream consumer ensured (existing)', [
+                'durable' => $durable,
+                'filter_subject' => $filterSubject,
+            ]);
+
+            return $c;
         } catch (Throwable $e) {
+            Log::warning('JetStream consumer not found; creating consumer', [
+                'durable' => $durable,
+                'filter_subject' => $filterSubject,
+                'error' => $e->getMessage(),
+            ]);
+
             // Fallback: create consumer if missing.
             // NOTE: Prefer creating via NATS CLI so you can control max_deliver/backoff cleanly.
-            return $stream->createConsumer([
+            $c = $stream->createConsumer([
                 'durable_name'      => $durable,
                 'ack_policy'        => 'explicit',
                 'deliver_policy'    => 'all',
@@ -131,6 +179,17 @@ class JetStreamConsumer
                 // Pull tuning (server-side defaults if ignored by library)
                 'max_waiting'       => 128,
             ]);
+
+            Log::info('JetStream consumer created', [
+                'durable' => $durable,
+                'filter_subject' => $filterSubject,
+                'max_ack_pending' => 2000,
+                'max_deliver' => self::MAX_PROCESSING_ATTEMPTS,
+                'ack_wait_seconds' => 30,
+                'max_waiting' => 128,
+            ]);
+
+            return $c;
         }
     }
 
@@ -138,13 +197,22 @@ class JetStreamConsumer
     {
         // If NATS has already tried delivering this message too many times, ACK + park it.
         $deliveries = $this->getNumDelivered($msg);
+
+        $raw = $this->extractBody($msg);
+        $event = json_decode($raw, true);
+
+        $eventId = is_array($event) ? (string) ($event['id'] ?? '') : '';
+        $subject = is_array($event) ? (string) ($event['subject'] ?? $event['type'] ?? '') : '';
+
+        Log::debug('JetStream message received', [
+            'stream' => $streamName,
+            'consumer' => $durable,
+            'deliveries' => $deliveries,
+            'event_id' => $eventId !== '' ? $eventId : null,
+            'subject' => $subject !== '' ? $subject : null,
+        ]);
+
         if ($deliveries >= self::MAX_PROCESSING_ATTEMPTS) {
-            $raw = $this->extractBody($msg);
-            $event = json_decode($raw, true);
-
-            $eventId = is_array($event) ? (string) ($event['id'] ?? '') : '';
-            $subject = is_array($event) ? (string) ($event['subject'] ?? $event['type'] ?? '') : '';
-
             // Best effort: store why it got parked
             if ($eventId !== '') {
                 try {
@@ -156,39 +224,61 @@ class JetStreamConsumer
                             'stream'      => $streamName,
                             'consumer'    => $durable,
                             'payload'     => is_array($event) ? $event : ['raw' => $raw],
-                            'processed_at'=> null,
+                            'processed_at' => null,
                             'last_error'  => "Parked after {$deliveries} deliveries (poison message / handler failing).",
                         ]
                     );
                 } catch (Throwable $ignored) {
+                    Log::warning('Failed to write poison message into inbox while parking', [
+                        'stream' => $streamName,
+                        'consumer' => $durable,
+                        'event_id' => $eventId,
+                        'subject' => $subject,
+                        'error' => $ignored->getMessage(),
+                    ]);
                 }
             }
 
             $this->ackSafe($msg);
-            Log::warning('Poison message parked (max deliveries reached)', [
+
+            Log::warning('Poison message parked (max deliveries reached) - ACKed', [
                 'stream' => $streamName,
                 'consumer' => $durable,
                 'deliveries' => $deliveries,
-                'event_id' => $eventId ?: null,
-                'subject' => $subject ?: null,
+                'event_id' => $eventId !== '' ? $eventId : null,
+                'subject' => $subject !== '' ? $subject : null,
             ]);
+
             return;
         }
-
-        $raw = $this->extractBody($msg);
-        $event = json_decode($raw, true);
 
         if (!is_array($event)) {
             $this->ackSafe($msg);
+
+            Log::warning('Non-JSON message ACKed (ignored)', [
+                'stream' => $streamName,
+                'consumer' => $durable,
+                'deliveries' => $deliveries,
+                'raw_preview' => mb_substr($raw, 0, 200),
+            ]);
+
             return;
         }
 
-        $eventId = (string) ($event['id'] ?? '');
-        $subject = (string) ($event['subject'] ?? $event['type'] ?? '');
         $source  = (string) ($event['source'] ?? '');
 
         if ($eventId === '' || $subject === '') {
             $this->ackSafe($msg);
+
+            Log::warning('Invalid event envelope ACKed (missing id/subject)', [
+                'stream' => $streamName,
+                'consumer' => $durable,
+                'deliveries' => $deliveries,
+                'event_id' => $eventId !== '' ? $eventId : null,
+                'subject' => $subject !== '' ? $subject : null,
+                'source' => $source !== '' ? $source : null,
+            ]);
+
             return;
         }
 
@@ -203,6 +293,14 @@ class JetStreamConsumer
             if ($inbox && $inbox->processed_at) {
                 DB::commit();
                 $this->ackSafe($msg);
+
+                Log::debug('Event already processed - ACKed', [
+                    'stream' => $streamName,
+                    'consumer' => $durable,
+                    'event_id' => $eventId,
+                    'subject' => $subject,
+                ]);
+
                 return;
             }
 
@@ -217,9 +315,25 @@ class JetStreamConsumer
                     'processed_at'  => null,
                     'last_error'    => null,
                 ]);
+
+                Log::debug('Event inbox row created', [
+                    'stream' => $streamName,
+                    'consumer' => $durable,
+                    'event_id' => $eventId,
+                    'subject' => $subject,
+                ]);
             }
 
             $handlerClass = $this->router->resolve($subject);
+
+            Log::debug('Resolved handler for subject', [
+                'stream' => $streamName,
+                'consumer' => $durable,
+                'event_id' => $eventId,
+                'subject' => $subject,
+                'handler' => $handlerClass,
+            ]);
+
             /** @var EventHandlerInterface $handler */
             $handler = app($handlerClass);
             $handler->handle($event);
@@ -230,6 +344,14 @@ class JetStreamConsumer
 
             DB::commit();
             $this->ackSafe($msg);
+
+            Log::info('Event processed successfully - ACKed', [
+                'stream' => $streamName,
+                'consumer' => $durable,
+                'event_id' => $eventId,
+                'subject' => $subject,
+                'deliveries' => $deliveries,
+            ]);
         } catch (Throwable $e) {
             DB::rollBack();
 
@@ -239,11 +361,20 @@ class JetStreamConsumer
                     'last_error' => $e->getMessage(),
                 ]);
             } catch (Throwable $ignored) {
+                Log::warning('Failed to update inbox last_error after handler failure', [
+                    'stream' => $streamName,
+                    'consumer' => $durable,
+                    'event_id' => $eventId,
+                    'subject' => $subject,
+                    'error' => $ignored->getMessage(),
+                ]);
             }
 
             $this->nakSafe($msg);
 
-            Log::error('Event processing failed', [
+            Log::error('Event processing failed - NAKed', [
+                'stream' => $streamName,
+                'consumer' => $durable,
                 'event_id' => $eventId,
                 'subject' => $subject,
                 'deliveries' => $deliveries,
@@ -259,9 +390,6 @@ class JetStreamConsumer
     private function getNumDelivered($msg): int
     {
         try {
-            // Common patterns across clients:
-            // - $msg->getHeaders() returns array
-            // - $msg->headers is array
             $headers = null;
 
             if (method_exists($msg, 'getHeaders')) {
@@ -281,6 +409,7 @@ class JetStreamConsumer
                 }
             }
         } catch (Throwable $e) {
+            // ignore
         }
 
         // If we can’t read it, return 0 so it behaves like “first attempt”.
@@ -309,16 +438,26 @@ class JetStreamConsumer
     private function ackSafe($msg): void
     {
         try {
-            if (method_exists($msg, 'ack')) $msg->ack();
+            if (method_exists($msg, 'ack')) {
+                $msg->ack();
+            }
         } catch (Throwable $e) {
+            Log::warning('ACK failed', [
+                'error' => $e->getMessage(),
+            ]);
         }
     }
 
     private function nakSafe($msg): void
     {
         try {
-            if (method_exists($msg, 'nak')) $msg->nak();
+            if (method_exists($msg, 'nak')) {
+                $msg->nak();
+            }
         } catch (Throwable $e) {
+            Log::warning('NAK failed', [
+                'error' => $e->getMessage(),
+            ]);
         }
     }
 }
