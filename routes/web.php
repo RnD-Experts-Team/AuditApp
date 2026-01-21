@@ -25,11 +25,17 @@ Route::middleware(['auth'])->group(function () {
     Route::get('camera-reports/export', [CameraReportController::class, 'export'])->name('camera-reports.export');
 
     Route::middleware('admin.only')->group(function () {
-        Route::resource('stores', StoreController::class)->except(['show', 'create', 'edit']);
+        // Route::resource('stores', StoreController::class)->except(['show', 'create', 'edit']);
         Route::resource('entities', EntityController::class)->except(['show', 'create', 'edit']);
         Route::resource('categories', CategoryController::class)->only(['store', 'update', 'destroy']);
-        Route::resource('users', UserController::class);
-        });
-    });
+        // Route::resource('users', UserController::class);
+        // STORES: READ ONLY
+        Route::get('/stores', [StoreController::class, 'index'])->name('stores.index');
 
-require __DIR__.'/settings.php';
+        // USERS: INDEX + UPDATE ONLY (role/groups)
+        Route::get('/users', [UserController::class, 'index'])->name('users.index');
+        Route::put('/users/{user}', [UserController::class, 'update'])->name('users.update');
+    });
+});
+
+require __DIR__ . '/settings.php';

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Audit;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
+use Illuminate\Support\Facades\Auth;
 
 class AuditController extends Controller
 {
@@ -13,7 +14,7 @@ class AuditController extends Controller
      */
     public function index()
     {
-        $user = auth()->user();
+        $user = Auth::User();
 
         // Admins see all audits
         if ($user->isAdmin()) {
@@ -25,8 +26,8 @@ class AuditController extends Controller
             $audits = Audit::whereHas('store', function ($query) use ($userGroups) {
                 $query->whereIn('group', $userGroups);
             })
-            ->with(['store', 'user'])
-            ->paginate(15);
+                ->with(['store', 'user'])
+                ->paginate(15);
         }
 
         return Inertia::render('Audits/Index', ['audits' => $audits]);
@@ -37,7 +38,7 @@ class AuditController extends Controller
      */
     public function show(Audit $audit)
     {
-        $user = auth()->user();
+        $user = Auth::User();
 
         // Check if user has access to this audit
         if (!$user->isAdmin() && !$user->canAccessAudit($audit)) {
