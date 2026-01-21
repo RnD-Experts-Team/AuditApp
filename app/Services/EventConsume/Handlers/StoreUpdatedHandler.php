@@ -4,48 +4,100 @@ namespace App\Services\EventConsume\Handlers;
 
 use App\Models\Store;
 use App\Services\EventConsume\EventHandlerInterface;
-use Exception;
+use Illuminate\Support\Facades\DB;
 
 class StoreUpdatedHandler implements EventHandlerInterface
 {
     public function handle(array $event): void
     {
-        $storeId = $event['data']['store_id'] ?? null;
-        $changed = $event['data']['changed_fields'] ?? null;
+        $storePayload = $this->extractStorePayload($event);
 
-        if (!is_numeric($storeId)) throw new Exception('store.updated missing data.store_id');
-        if (!is_array($changed)) return;
-
-        $updates = [];
-
-        if (isset($changed['name']['to']) && is_string($changed['name']['to'])) {
-            $updates['store'] = $changed['name']['to'];
+        $id = $this->asInt(data_get($storePayload, 'id'));
+        if ($id <= 0) {
+            // some update events might be delta: data.store_id + changed_fields
+            $id = $this->asInt(data_get($event, 'data.store_id') ?? data_get($event, 'store_id'));
         }
 
-        if (array_key_exists('metadata', $changed)) {
-            $updates['group'] = $this->extractGroup($changed['metadata']['to'] ?? null);
+        if ($id <= 0) {
+            throw new \Exception('StoreUpdatedHandler: missing/invalid store id');
         }
 
-        if (empty($updates)) return;
+        $storeIdString = $this->extractStoreIdString($storePayload);
 
-        Store::query()->updateOrCreate(
-            ['id' => (int) $storeId],
-            $updates
-        );
+        $metadata = data_get($storePayload, 'metadata');
+        $group = $this->extractGroup($metadata) ?? 69;
+
+        DB::transaction(function () use ($id, $storeIdString, $group) {
+            Store::query()->updateOrCreate(
+                ['id' => $id],
+                [
+                    'store' => $storeIdString,
+                    'group' => (int) $group,
+                ]
+            );
+        });
     }
 
-    private function extractGroup(mixed $meta): int
+    private function extractStorePayload(array $event): array
     {
-        if (is_string($meta)) {
-            $decoded = json_decode($meta, true);
-            $meta = is_array($decoded) ? $decoded : [];
+        $store = data_get($event, 'data.store');
+        if (is_array($store)) return $store;
+
+        $store = data_get($event, 'store');
+        if (is_array($store)) return $store;
+
+        $store = data_get($event, 'payload.store');
+        if (is_array($store)) return $store;
+
+        // delta-style payload: data.changed_fields + data.store_id
+        $changed = data_get($event, 'data.changed_fields');
+        if (is_array($changed)) {
+            $id = data_get($event, 'data.store_id') ?? data_get($event, 'store_id');
+            return ['id' => $id] + $changed;
         }
 
-        if (is_array($meta)) {
-            $g = $meta['group'] ?? null;
-            if (is_numeric($g)) return (int) $g;
+        // If nothing, return empty so we can still delete gracefully elsewhere
+        return [];
+    }
+
+    private function extractStoreIdString(array $storePayload): string
+    {
+        $v = data_get($storePayload, 'store_id');
+        if (is_string($v) && trim($v) !== '') return trim($v);
+
+        $v = data_get($storePayload, 'store');
+        if (is_string($v) && trim($v) !== '') return trim($v);
+
+        $id = data_get($storePayload, 'id');
+        if (is_scalar($id) && (string) $id !== '') return (string) $id;
+
+        return 'UNKNOWN';
+    }
+
+    private function extractGroup(mixed $metadata): ?int
+    {
+        if (!is_array($metadata)) {
+            return null;
         }
 
-        return 69;
+        foreach ($metadata as $key => $value) {
+            if (!is_string($key)) continue;
+
+            if (preg_match('/group/i', $key) === 1) {
+                if (is_int($value)) return $value;
+                if (is_string($value) && is_numeric(trim($value))) return (int) trim($value);
+                if (is_numeric($value)) return (int) $value;
+            }
+        }
+
+        return null;
+    }
+
+    private function asInt(mixed $v): int
+    {
+        if (is_int($v)) return $v;
+        if (is_string($v) && ctype_digit($v)) return (int) $v;
+        if (is_numeric($v)) return (int) $v;
+        return 0;
     }
 }

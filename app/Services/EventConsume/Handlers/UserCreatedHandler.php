@@ -4,128 +4,119 @@ namespace App\Services\EventConsume\Handlers;
 
 use App\Models\User;
 use App\Services\EventConsume\EventHandlerInterface;
-use Exception;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
-use Spatie\Permission\Models\Permission;
-use Spatie\Permission\Models\Role;
 
 class UserCreatedHandler implements EventHandlerInterface
 {
     public function handle(array $event): void
     {
-        $u = $event['data']['user'] ?? null;
-        if (!is_array($u)) {
-            throw new Exception('user.created missing data.user');
+        $userPayload = $this->extractUserPayload($event);
+
+        $id = $this->asInt(data_get($userPayload, 'id'));
+        if ($id <= 0) {
+            throw new \Exception('UserCreatedHandler: missing/invalid user.id');
         }
 
-        $id = $u['id'] ?? null;
-        $name = (string) ($u['name'] ?? '');
-        $email = (string) ($u['email'] ?? '');
-
-        if (!is_numeric($id)) {
-            throw new Exception('user.created missing user.id');
-        }
+        $email = (string) data_get($userPayload, 'email', '');
         if ($email === '') {
-            throw new Exception('user.created missing user.email');
+            // If you ever get a user without email, your consumer schema will break uniqueness anyway.
+            throw new \Exception('UserCreatedHandler: missing user.email');
         }
 
-        // 1) Keep your QA enum behavior.
-        $rolesByName = $event['data']['roles'] ?? [];
-        $roleEnum = $this->inferEnumRole($rolesByName);
+        $name = (string) data_get($userPayload, 'name', 'Unknown');
 
-        // Upsert user row with exact ID.
-        $user = User::query()->updateOrCreate(
-            ['id' => (int) $id],
-            [
-                'name' => $name !== '' ? $name : $email,
-                'email' => $email,
-                'role' => $roleEnum,
-
-                // required for Laravel auth, QA doesn't use it
-                'password' => Hash::make(Str::random(40)),
-                'email_verified_at' => now(),
-            ]
-        );
-
-        // 2) ALSO mirror Spatie roles (if provided).
-        $roleNames = $this->normalizeStringList($rolesByName);
-
-        if (count($roleNames) > 0) {
-            // Require role rows exist already (IDs come from role.created).
-            foreach ($roleNames as $roleName) {
-                $exists = Role::query()
-                    ->where('name', $roleName)
-                    ->where('guard_name', $this->guardName())
-                    ->exists();
-
-                if (!$exists) {
-                    throw new Exception("Role '{$roleName}' not found in QA yet (must arrive via auth.v1.role.created).");
-                }
-            }
-
-            // syncRoles by name (Spatie keeps ids because Role rows already have truth IDs).
-            $user->syncRoles($roleNames);
+        // Payload does not include role/groups => defaults
+        $role = (string) data_get($userPayload, 'role', 'User');
+        if (!in_array($role, ['Admin', 'User'], true)) {
+            $role = 'User';
         }
 
-        // 3) ALSO mirror direct permissions (publisher uses permissions_direct on create).
-        $directPermNames = $this->normalizeStringList($event['data']['permissions_direct'] ?? []);
-
-        if (count($directPermNames) > 0) {
-            // Require permission rows exist already (IDs come from permission.created or role.created snapshot).
-            foreach ($directPermNames as $permName) {
-                $p = Permission::query()
-                    ->where('name', $permName)
-                    ->where('guard_name', $this->guardName())
-                    ->first();
-
-                if (!$p) {
-                    throw new Exception("Permission '{$permName}' not found in QA yet (must arrive via auth.v1.permission.created or role.created snapshot).");
-                }
+        // Consumer schema requires password (NOT NULL). Payload doesn’t include it.
+        $password = (string) data_get($userPayload, 'password', '');
+        if ($password === '') {
+            $password = Hash::make(Str::random(48));
+        } else {
+            // if they ever send a plain password, hash it
+            if (!Str::startsWith($password, '$2y$') && !Str::startsWith($password, '$2a$') && !Str::startsWith($password, '$2b$')) {
+                $password = Hash::make($password);
             }
+        }
 
-            $user->syncPermissions($directPermNames);
+        DB::transaction(function () use ($id, $name, $email, $role, $password) {
+            User::query()->updateOrCreate(
+                ['id' => $id],
+                [
+                    'name' => $name,
+                    'email' => $email,
+                    'role' => $role,
+                    'password' => $password,
+                ]
+            );
+
+            // Default group assignment (if table exists)
+            $this->ensureUserGroup($id, 69);
+        });
+    }
+
+    private function extractUserPayload(array $event): array
+    {
+        // Typical envelope patterns we support:
+        // 1) $event['data']['user']
+        // 2) $event['user']
+        // 3) $event['payload']['user']
+        $user = data_get($event, 'data.user');
+        if (is_array($user)) return $user;
+
+        $user = data_get($event, 'user');
+        if (is_array($user)) return $user;
+
+        $user = data_get($event, 'payload.user');
+        if (is_array($user)) return $user;
+
+        throw new \Exception('UserCreatedHandler: user payload not found in event');
+    }
+
+    private function ensureUserGroup(int $userId, int $group): void
+    {
+        $group = (int) $group;
+
+        // If you have a model:
+        if (class_exists(\App\Models\UserGroup::class)) {
+            /** @var class-string<\Illuminate\Database\Eloquent\Model> $klass */
+            $klass = \App\Models\UserGroup::class;
+
+            $klass::query()->updateOrCreate(
+                ['user_id' => $userId, 'group' => $group],
+                ['user_id' => $userId, 'group' => $group]
+            );
+            return;
+        }
+
+        // If model doesn't exist, but table does:
+        if (DB::getSchemaBuilder()->hasTable('user_groups')) {
+            $exists = DB::table('user_groups')
+                ->where('user_id', $userId)
+                ->where('group', $group)
+                ->exists();
+
+            if (!$exists) {
+                DB::table('user_groups')->insert([
+                    'user_id' => $userId,
+                    'group' => $group,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            }
         }
     }
 
-    private function inferEnumRole(mixed $roles): string
+    private function asInt(mixed $v): int
     {
-        if (is_array($roles)) {
-            foreach ($roles as $r) {
-                if (is_string($r) && strcasecmp($r, 'Admin') === 0) {
-                    return 'Admin';
-                }
-            }
-        }
-        return 'User';
-    }
-
-    /**
-     * Normalize a list of string values safely.
-     * @return array<int,string>
-     */
-    private function normalizeStringList(mixed $value): array
-    {
-        if (!is_array($value)) {
-            return [];
-        }
-
-        $out = [];
-        foreach ($value as $v) {
-            if (is_string($v)) {
-                $v = trim($v);
-                if ($v !== '') {
-                    $out[] = $v;
-                }
-            }
-        }
-
-        return array_values(array_unique($out));
-    }
-
-    private function guardName(): string
-    {
-        // Must match your publisher defaults (web).
-        return 'web';
+        if (is_int($v)) return $v;
+        if (is_string($v) && ctype_digit($v)) return (int) $v;
+        if (is_numeric($v)) return (int) $v;
+        return 0;
     }
 }
