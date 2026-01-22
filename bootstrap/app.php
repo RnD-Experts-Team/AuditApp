@@ -17,7 +17,6 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->encryptCookies(except: ['appearance', 'sidebar_state']);
         $middleware->alias([
             'auth.token.store' => \App\Http\Middleware\AuthTokenStoreScopeMiddleware::class,
-            'perm' => \App\Http\Middleware\EnsurePermission::class,
         ]);
         $middleware->web(append: [
             HandleAppearance::class,
