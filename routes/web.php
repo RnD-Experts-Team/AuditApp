@@ -26,21 +26,13 @@ Route::middleware(['auth.token.store'])->group(function () {
 
     Route::resource('audits', AuditController::class)->only(['index', 'show']);
 
-    /**
-     * ONE permission for configuration management:
-     * - Entities
-     * - Categories
-     * (Stores/Users pages are optional; keep only if you still use them)
-     */
-    Route::middleware(['perm:manage_camera_config'])->group(function () {
-        Route::resource('entities', EntityController::class)->except(['show', 'create', 'edit']);
-        Route::resource('categories', CategoryController::class)->only(['store', 'update', 'destroy']);
+    Route::resource('entities', EntityController::class)->except(['show', 'create', 'edit']);
+    Route::resource('categories', CategoryController::class)->only(['store', 'update', 'destroy']);
 
-        // Optional admin pages (keep if you still need them)
-        Route::get('/stores', [StoreController::class, 'index'])->name('stores.index');
-        Route::get('/users', [UserController::class, 'index'])->name('users.index');
-        Route::put('/users/{user}', [UserController::class, 'update'])->name('users.update');
-    });
+    // Optional admin pages (keep if you still need them)
+    Route::get('/stores', [StoreController::class, 'index'])->name('stores.index');
+    Route::get('/users', [UserController::class, 'index'])->name('users.index');
+    Route::put('/users/{user}', [UserController::class, 'update'])->name('users.update');
 });
 
 require __DIR__ . '/settings.php';
