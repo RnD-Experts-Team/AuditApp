@@ -12,7 +12,7 @@ class UserStoreRoleRemovedHandler implements EventHandlerInterface
      * Set this to the role_id you want to replicate in this consumer.
      * Example: 5
      */
-    protected static int $replicatedRoleId = 5;
+    protected static int $replicatedRoleId = 2;
 
     public function handle(array $event): void
     {

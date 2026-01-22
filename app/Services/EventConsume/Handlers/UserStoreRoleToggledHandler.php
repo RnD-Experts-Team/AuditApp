@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\DB;
 
 class UserStoreRoleToggledHandler implements EventHandlerInterface
 {
-    protected static int $replicatedRoleId = 5;
+    protected static int $replicatedRoleId = 2;
 
     public function handle(array $event): void
     {

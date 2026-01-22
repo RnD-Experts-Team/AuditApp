@@ -14,7 +14,7 @@ class UserStoreRoleAssignedHandler implements EventHandlerInterface
      * ✅ Set this to the role_id you want to replicate.
      * Example: 5 means only role_id=5 assignments will be stored in user_store_roles.
      */
-    protected static int $replicatedRoleId = 5;
+    protected static int $replicatedRoleId = 2;
 
     public function handle(array $event): void
     {
