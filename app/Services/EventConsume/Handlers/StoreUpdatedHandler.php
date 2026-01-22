@@ -10,68 +10,63 @@ class StoreUpdatedHandler implements EventHandlerInterface
 {
     public function handle(array $event): void
     {
-        $storePayload = $this->extractStorePayload($event);
+        $id = $this->asInt(data_get($event, 'data.store_id') ?? data_get($event, 'store_id'));
 
-        $id = $this->asInt(data_get($storePayload, 'id'));
+        // fallback if producer sends data.store.id
         if ($id <= 0) {
-            // some update events might be delta: data.store_id + changed_fields
-            $id = $this->asInt(data_get($event, 'data.store_id') ?? data_get($event, 'store_id'));
+            $id = $this->asInt(data_get($event, 'data.store.id') ?? data_get($event, 'store.id'));
         }
 
         if ($id <= 0) {
             throw new \Exception('StoreUpdatedHandler: missing/invalid store id');
         }
 
-        $storeIdString = $this->extractStoreIdString($storePayload);
-
-        $metadata = data_get($storePayload, 'metadata');
-        $group = $this->extractGroup($metadata) ?? 69;
-
-        DB::transaction(function () use ($id, $storeIdString, $group) {
-            Store::query()->updateOrCreate(
-                ['id' => $id],
-                [
-                    'store' => $storeIdString,
-                    'group' => (int) $group,
-                ]
-            );
-        });
-    }
-
-    private function extractStorePayload(array $event): array
-    {
-        $store = data_get($event, 'data.store');
-        if (is_array($store)) return $store;
-
-        $store = data_get($event, 'store');
-        if (is_array($store)) return $store;
-
-        $store = data_get($event, 'payload.store');
-        if (is_array($store)) return $store;
-
-        // delta-style payload: data.changed_fields + data.store_id
-        $changed = data_get($event, 'data.changed_fields');
-        if (is_array($changed)) {
-            $id = data_get($event, 'data.store_id') ?? data_get($event, 'store_id');
-            return ['id' => $id] + $changed;
+        $changed = data_get($event, 'data.changed_fields', []);
+        if (!is_array($changed)) {
+            $changed = [];
         }
 
-        // If nothing, return empty so we can still delete gracefully elsewhere
-        return [];
-    }
+        // Pull "to" values only
+        $metadataTo = data_get($changed, 'metadata.to');
+        $isActiveTo = data_get($changed, 'is_active.to');
 
-    private function extractStoreIdString(array $storePayload): string
-    {
-        $v = data_get($storePayload, 'store_id');
-        if (is_string($v) && trim($v) !== '') return trim($v);
+        // If metadata is present, try to extract group from it
+        $group = $this->extractGroup($metadataTo);
 
-        $v = data_get($storePayload, 'store');
-        if (is_string($v) && trim($v) !== '') return trim($v);
+        DB::transaction(function () use ($id, $group, $isActiveTo) {
+            /** @var Store $store */
+            $store = Store::query()->find($id);
 
-        $id = data_get($storePayload, 'id');
-        if (is_scalar($id) && (string) $id !== '') return (string) $id;
+            // If your downstream DB must not create stores until "created" event arrives:
+            // then throw here instead of updateOrCreate.
+            if (!$store) {
+                // If you DO want to allow eventual consistency, keep updateOrCreate behavior.
+                $store = new Store();
+                $store->id = $id;
+            }
 
-        return 'UNKNOWN';
+            $update = [];
+
+            // Only update group if we extracted one from metadata
+            if ($group !== null) {
+                $update['group'] = (int) $group;
+            }
+
+            // Only update is_active if it was provided
+            if ($isActiveTo !== null) {
+                $update['is_active'] = (bool) $isActiveTo;
+            }
+
+            if (!empty($update)) {
+                // If it's a new model instance with preset id
+                if (!$store->exists) {
+                    $store->fill($update);
+                    $store->save();
+                } else {
+                    $store->update($update);
+                }
+            }
+        });
     }
 
     private function extractGroup(mixed $metadata): ?int

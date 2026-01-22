@@ -10,19 +10,24 @@ class UserUpdatedHandler implements EventHandlerInterface
 {
     public function handle(array $event): void
     {
-        $userPayload = $this->extractUserPayload($event);
+        $id = $this->asInt(data_get($event, 'data.user_id') ?? data_get($event, 'user_id'));
 
-        $id = $this->asInt(data_get($userPayload, 'id'));
+        // fallback if some producers send data.user.id
         if ($id <= 0) {
-            // allow delta envelope: user_id + changed_fields
-            $id = $this->asInt(data_get($event, 'data.user_id') ?? data_get($event, 'user_id'));
+            $id = $this->asInt(data_get($event, 'data.user.id') ?? data_get($event, 'user.id'));
         }
 
         if ($id <= 0) {
             throw new \Exception('UserUpdatedHandler: missing/invalid user id');
         }
 
-        DB::transaction(function () use ($id, $userPayload) {
+        // Delta-style: data.changed_fields.{field}.{to|from}
+        $changed = data_get($event, 'data.changed_fields', []);
+        if (!is_array($changed)) {
+            $changed = [];
+        }
+
+        DB::transaction(function () use ($id, $changed) {
             $user = User::query()->find($id);
 
             // IMPORTANT: do not create users here (bus is source of truth)
@@ -32,39 +37,25 @@ class UserUpdatedHandler implements EventHandlerInterface
 
             $update = [];
 
-            if (data_get($userPayload, 'name') !== null) {
-                $update['name'] = (string) data_get($userPayload, 'name');
+            // Only apply "to" values (delta envelope)
+            $nameTo = data_get($changed, 'name.to');
+            if ($nameTo !== null) {
+                $update['name'] = (string) $nameTo;
             }
 
-            if (data_get($userPayload, 'email') !== null) {
-                $update['email'] = (string) data_get($userPayload, 'email');
+            $emailTo = data_get($changed, 'email.to');
+            if ($emailTo !== null) {
+                $update['email'] = (string) $emailTo;
             }
+
+            // Password should generally NOT be synced to downstream services via events.
+            // If you do publish it, it should be handled in a separate secure channel.
+            // So we intentionally do nothing here even if password.to exists.
 
             if (!empty($update)) {
                 $user->update($update);
             }
         });
-    }
-
-    private function extractUserPayload(array $event): array
-    {
-        $user = data_get($event, 'data.user');
-        if (is_array($user)) return $user;
-
-        $user = data_get($event, 'user');
-        if (is_array($user)) return $user;
-
-        $user = data_get($event, 'payload.user');
-        if (is_array($user)) return $user;
-
-        // delta style: data.user_id + data.changed_fields
-        $id = data_get($event, 'data.user_id') ?? data_get($event, 'user_id');
-        $changed = data_get($event, 'data.changed_fields');
-        if ($id !== null && is_array($changed)) {
-            return ['id' => $id] + $changed;
-        }
-
-        throw new \Exception('UserUpdatedHandler: user payload not found in event');
     }
 
     private function asInt(mixed $v): int
