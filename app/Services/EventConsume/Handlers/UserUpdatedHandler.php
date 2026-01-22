@@ -11,8 +11,6 @@ class UserUpdatedHandler implements EventHandlerInterface
 {
     public function handle(array $event): void
     {
-        // Optional: keep your payload log (helps confirm handler is receiving what you expect)
-        $this->dumpEventPayload($event);
 
         $id = $this->asInt(data_get($event, 'data.user_id') ?? data_get($event, 'user_id'));
 
@@ -119,32 +117,6 @@ class UserUpdatedHandler implements EventHandlerInterface
         return null;
     }
 
-    /**
-     * Writes full payload to: storage/logs/event-payloads.log
-     */
-    private function dumpEventPayload(array $event): void
-    {
-        try {
-            $eventId = (string) ($event['id'] ?? '');
-            $subject = (string) ($event['subject'] ?? $event['type'] ?? '');
-            $time    = (string) ($event['time'] ?? '');
-
-            $logger = Log::build([
-                'driver' => 'single',
-                'path' => storage_path('logs/event-payloads.log'),
-                'level' => 'info',
-            ]);
-
-            $logger->info('Inbound event payload (UserUpdatedHandler)', [
-                'event_id' => $eventId,
-                'subject' => $subject,
-                'time' => $time,
-                'payload_json' => json_encode($event, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
-            ]);
-        } catch (\Throwable $e) {
-            // never break the consumer because logging failed
-        }
-    }
 
     private function asInt(mixed $v): int
     {
