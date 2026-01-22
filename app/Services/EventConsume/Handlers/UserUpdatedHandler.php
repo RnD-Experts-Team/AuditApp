@@ -10,7 +10,8 @@ class UserUpdatedHandler implements EventHandlerInterface
 {
     public function handle(array $event): void
     {
-        throw new \Exception('the event is' . json_encode($event));
+        $this->dumpEventPayload($event);
+
         $id = $this->asInt(data_get($event, 'data.user_id') ?? data_get($event, 'user_id'));
 
         // fallback if some producers send data.user.id
@@ -61,6 +62,34 @@ class UserUpdatedHandler implements EventHandlerInterface
         });
     }
 
+    private function dumpEventPayload(array $event): void
+    {
+        try {
+            $eventId = (string) ($event['id'] ?? '');
+            $subject = (string) ($event['subject'] ?? $event['type'] ?? '');
+            $time    = (string) ($event['time'] ?? '');
+
+            $logger = \Log::build([
+                'driver' => 'single',
+                'path' => storage_path('logs/event-payloads.log'),
+                'level' => 'info',
+            ]);
+
+            // Log both structured + raw JSON string
+            $logger->info('Inbound event payload (UserUpdatedHandler)', [
+                'event_id' => $eventId,
+                'subject' => $subject,
+                'time' => $time,
+                'payload_json' => json_encode($event, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+            ]);
+        } catch (\Throwable $e) {
+            // If logging fails, do NOT break consumption
+            \Log::warning('UserUpdatedHandler: failed dumping payload', [
+                'error' => $e->getMessage(),
+                'exception' => get_class($e),
+            ]);
+        }
+    }
     /**
      * Supports:
      *  changed_fields[field] = ['from' => X, 'to' => Y]
