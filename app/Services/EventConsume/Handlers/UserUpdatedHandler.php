@@ -21,12 +21,22 @@ class UserUpdatedHandler implements EventHandlerInterface
             throw new \Exception('UserUpdatedHandler: missing/invalid user id');
         }
 
-        $changed = data_get($event, 'data.changed_fields', []);
+        // Pull changed_fields (delta payload)
+        $changed = data_get($event, 'data.changed_fields');
         if (!is_array($changed)) {
             $changed = [];
         }
 
-        DB::transaction(function () use ($id, $changed) {
+        /**
+         * Extract ONLY the "to" values in a safe way:
+         * - If name.to is scalar => use it
+         * - If name is scalar (some producers) => use it
+         * - If anything is array/object => ignore (prevents Array->string conversions)
+         */
+        $nameTo  = $this->extractDeltaToScalar($changed, 'name');
+        $emailTo = $this->extractDeltaToScalar($changed, 'email');
+
+        DB::transaction(function () use ($id, $nameTo, $emailTo) {
             $user = User::query()->find($id);
 
             // IMPORTANT: do not create users here (bus is source of truth)
@@ -36,24 +46,13 @@ class UserUpdatedHandler implements EventHandlerInterface
 
             $update = [];
 
-            /**
-             * Delta-safe extraction:
-             * - supports: changed_fields.name.to
-             * - supports: changed_fields.name = "Qa"
-             * - ignores arrays/objects that cannot be safely cast to string
-             */
-            $nameTo = $this->deltaToValue($changed, 'name');
             if ($nameTo !== null) {
                 $update['name'] = $nameTo;
             }
 
-            $emailTo = $this->deltaToValue($changed, 'email');
             if ($emailTo !== null) {
                 $update['email'] = $emailTo;
             }
-
-            // Password should NOT be synced via events to downstream apps.
-            // Intentionally ignored even if present.
 
             if (!empty($update)) {
                 $user->update($update);
@@ -62,24 +61,26 @@ class UserUpdatedHandler implements EventHandlerInterface
     }
 
     /**
-     * Extract the "to" value from a delta payload safely.
+     * Supports:
+     *  changed_fields[field] = ['from' => X, 'to' => Y]
+     *  changed_fields[field] = 'value'
      *
-     * Accepts either:
-     *   changed_fields[field] = ['from' => ..., 'to' => ...]
-     *   changed_fields[field] = <scalar>
-     *
-     * Returns a string for scalar values only.
-     * Returns null if the value is missing or not safely convertible.
+     * Returns:
+     *  - string if value is scalar
+     *  - null if missing or array/object
      */
-    private function deltaToValue(array $changed, string $field): ?string
+    private function extractDeltaToScalar(array $changed, string $field): ?string
     {
-        $v = $changed[$field] ?? null;
+        if (!array_key_exists($field, $changed)) {
+            return null;
+        }
 
-        // Most common: ['from' => ..., 'to' => ...]
+        $v = $changed[$field];
+
+        // Standard delta shape: {from,to}
         if (is_array($v) && array_key_exists('to', $v)) {
             $to = $v['to'];
 
-            // Only accept scalar "to" values
             if (is_string($to)) {
                 $to = trim($to);
                 return $to === '' ? null : $to;
@@ -89,11 +90,11 @@ class UserUpdatedHandler implements EventHandlerInterface
                 return (string) $to;
             }
 
-            // If "to" is an array/object => do not cast (prevents Array to string conversion)
+            // array/object => ignore safely
             return null;
         }
 
-        // Some producers might send direct scalar values: changed_fields[field] = "Qa"
+        // Some producers might send direct scalar values
         if (is_string($v)) {
             $v = trim($v);
             return $v === '' ? null : $v;
@@ -103,7 +104,7 @@ class UserUpdatedHandler implements EventHandlerInterface
             return (string) $v;
         }
 
-        // Anything else (array/object/null) => ignore safely
+        // array/object => ignore safely
         return null;
     }
 
