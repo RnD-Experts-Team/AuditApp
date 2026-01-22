@@ -32,21 +32,22 @@ class CameraReportController extends Controller
     public function index(Request $request)
     {
         $user = Auth::user();
+        if (!$user) abort(401);
 
-        // Stores & groups based on role
-        if ($user->isAdmin()) {
-            $stores = Store::select('id', 'store', 'group')->orderBy('store')->get();
-            $groups = Store::select('group')->distinct()->whereNotNull('group')->orderBy('group')->pluck('group');
-        } else {
-            $userGroups = $user->getGroupNumbers();
-            $stores = Store::select('id', 'store', 'group')
-                ->whereIn('group', $userGroups)
-                ->orderBy('store')
-                ->get();
-            $groups = collect($userGroups)->sort()->values();
-        }
+        $allowedStoreIds = $user->allowedStoreIdsCached();
 
-        // Ratings for dropdown filter
+        $stores = Store::select('id', 'store', 'group')
+            ->whereIn('id', $allowedStoreIds)
+            ->orderBy('store')
+            ->get();
+
+        $groups = Store::select('group')
+            ->distinct()
+            ->whereNotNull('group')
+            ->whereIn('id', $allowedStoreIds)
+            ->orderBy('group')
+            ->pluck('group');
+
         $ratings = DB::table('ratings')
             ->select('id', 'label')
             ->orderBy('id')
@@ -482,7 +483,7 @@ class CameraReportController extends Controller
 
         $ratingId = ($ratingId !== null && $ratingId !== '') ? (int) $ratingId : null;
 
-        $userGroups = $user->isAdmin() ? null : $user->getGroupNumbers();
+        $allowedStoreIds = $user->allowedStoreIdsCached();
 
         /**
          * 1) Base query for ratings/scoring rows (NO notes join to avoid duplication)
@@ -503,7 +504,7 @@ class CameraReportController extends Controller
                 'camera_forms.rating_id',
                 'ratings.label as rating_label'
             )
-            ->when(!$user->isAdmin(), fn($q) => $q->whereIn('stores.group', $userGroups))
+            ->whereIn('stores.id', $allowedStoreIds)
             ->when($storeId, fn($q) => $q->where('stores.id', $storeId))
             ->when($group, fn($q) => $q->where('stores.group', $group))
             ->when($reportType, fn($q) => $q->where('entities.report_type', $reportType));
@@ -545,11 +546,8 @@ class CameraReportController extends Controller
         /**
          * 3) Filtered stores
          */
-        $storesQuery = Store::query();
+        $storesQuery = Store::query()->whereIn('id', $allowedStoreIds);
 
-        if (!$user->isAdmin()) {
-            $storesQuery->whereIn('group', $userGroups);
-        }
         if ($storeId) $storesQuery->where('id', $storeId);
         if ($group)   $storesQuery->where('group', $group);
 
@@ -573,7 +571,7 @@ class CameraReportController extends Controller
                 'entities.id as entity_id',
                 'camera_form_notes.note as note'
             )
-            ->when(!$user->isAdmin(), fn($q) => $q->whereIn('stores.group', $userGroups))
+            ->whereIn('stores.id', $allowedStoreIds)
             ->when($storeId, fn($q) => $q->where('stores.id', $storeId))
             ->when($group, fn($q) => $q->where('stores.group', $group))
             ->when($reportType, fn($q) => $q->where('entities.report_type', $reportType));
@@ -714,7 +712,7 @@ class CameraReportController extends Controller
         $ratingId   = $request->input('rating_id');
         $ratingId = ($ratingId !== null && $ratingId !== '') ? (int) $ratingId : null;
 
-        $userGroups = $user->isAdmin() ? null : $user->getGroupNumbers();
+        $allowedStoreIds = $user->allowedStoreIdsCached();
 
         $q = DB::table('camera_form_note_attachments as a')
             ->join('camera_form_notes as n', 'n.id', '=', 'a.camera_form_note_id')
@@ -730,7 +728,7 @@ class CameraReportController extends Controller
                 'audits.date as date',
                 'a.path as path'
             )
-            ->when(!$user->isAdmin(), fn($qq) => $qq->whereIn('stores.group', $userGroups))
+            ->whereIn('stores.id', $allowedStoreIds)
             ->when($storeId, fn($qq) => $qq->where('stores.id', $storeId))
             ->when($group, fn($qq) => $qq->where('stores.group', $group))
             ->when($reportType, fn($qq) => $qq->where('entities.report_type', $reportType));

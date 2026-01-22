@@ -11,7 +11,6 @@ use App\Models\CameraFormNoteAttachment;
 use App\Models\Entity;
 use App\Models\Rating;
 use App\Models\Store;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -21,9 +20,12 @@ use Illuminate\Support\Str;
 
 class CameraFormController extends Controller
 {
-    public function index(Request $request)
+    public function index(\Illuminate\Http\Request $request)
     {
         $user = Auth::user();
+        if (!$user) abort(401);
+
+        $allowedStoreIds = $user->allowedStoreIdsCached();
         $dateRangeType = $request->input('date_range_type', 'daily');
 
         $entities = Entity::with('category')
@@ -39,39 +41,28 @@ class CameraFormController extends Controller
             'cameraForms.rating',
             'cameraForms.notes.attachments',
         ])
+            ->whereIn('store_id', $allowedStoreIds)
             ->whereHas('cameraForms.entity', function ($q) use ($dateRangeType) {
                 $q->where('date_range_type', $dateRangeType);
             });
 
-        if (!$user->isAdmin()) {
-            $userGroups = $user->getGroupNumbers();
-            $query->whereHas('store', function ($q) use ($userGroups) {
-                $q->whereIn('group', $userGroups);
-            });
-        }
-
         if ($request->filled('date_from')) $query->where('date', '>=', $request->date_from);
         if ($request->filled('date_to'))   $query->where('date', '<=', $request->date_to);
-        if ($request->filled('store_id'))  $query->where('store_id', $request->store_id);
-
-        if ($request->filled('group')) {
-            $query->whereHas('store', function ($q) use ($request) {
-                $q->where('group', $request->group);
-            });
-        }
+        if ($request->filled('store_id'))  $query->where('store_id', (int) $request->store_id);
 
         $audits = $query->orderBy('date', 'desc')->paginate(15);
 
-        if ($user->isAdmin()) {
-            $stores = Store::select('id', 'store', 'group')->get();
-            $groups = Store::select('group')->distinct()->whereNotNull('group')->pluck('group');
-        } else {
-            $userGroups = $user->getGroupNumbers();
-            $stores = Store::select('id', 'store', 'group')
-                ->whereIn('group', $userGroups)
-                ->get();
-            $groups = collect($userGroups);
-        }
+        $stores = Store::select('id', 'store', 'group')
+            ->whereIn('id', $allowedStoreIds)
+            ->orderBy('store')
+            ->get();
+
+        // groups no longer used for access control, but UI may still display groups
+        $groups = Store::select('group')
+            ->distinct()
+            ->whereNotNull('group')
+            ->whereIn('id', $allowedStoreIds)
+            ->pluck('group');
 
         return Inertia::render('CameraForms/Index', [
             'audits' => $audits,
@@ -85,6 +76,9 @@ class CameraFormController extends Controller
     public function create()
     {
         $user = Auth::user();
+        if (!$user) abort(401);
+
+        $allowedStoreIds = $user->allowedStoreIdsCached();
 
         $entities = Entity::with('category')
             ->where('active', true)
@@ -94,12 +88,7 @@ class CameraFormController extends Controller
 
         $ratings = Rating::orderBy('id')->get();
 
-        if ($user->isAdmin()) {
-            $stores = Store::orderBy('store')->get();
-        } else {
-            $userGroups = $user->getGroupNumbers();
-            $stores = Store::whereIn('group', $userGroups)->orderBy('store')->get();
-        }
+        $stores = Store::whereIn('id', $allowedStoreIds)->orderBy('store')->get();
 
         return Inertia::render('CameraForms/Create', [
             'entities' => $entities,
@@ -111,18 +100,22 @@ class CameraFormController extends Controller
     public function store(StoreCameraFormRequest $request)
     {
         $user = Auth::user();
+        if (!$user) abort(401);
 
-        $store = Store::findOrFail($request->store_id);
-        if (!$user->isAdmin() && !$user->hasGroupAccess($store->group)) {
+        $storeId = (int) $request->store_id;
+
+        if (!$user->canAccessStoreId($storeId)) {
             abort(403, 'Unauthorized');
         }
+
+        $store = Store::findOrFail($storeId);
 
         DB::beginTransaction();
 
         try {
             $audit = Audit::create([
-                'store_id' => $request->store_id,
-                'user_id' => Auth::id(),
+                'store_id' => $storeId,
+                'user_id' => (int) Auth::id(),
                 'date' => $request->date,
             ]);
 
@@ -150,7 +143,7 @@ class CameraFormController extends Controller
                 }
 
                 $cf = CameraForm::create([
-                    'user_id' => Auth::id(),
+                    'user_id' => (int) Auth::id(),
                     'entity_id' => $entityData['entity_id'],
                     'audit_id' => $audit->id,
                     'rating_id' => $entityData['rating_id'] ?? null,
@@ -164,7 +157,6 @@ class CameraFormController extends Controller
                         $files = $request->file("entities.$i.notes.$j.images") ?? [];
                         $hasImages = is_array($files) && count($files) > 0;
 
-                        // skip empty note rows
                         if ($noteTrim === '' && !$hasImages) continue;
 
                         $note = $cf->notes()->create([
@@ -200,6 +192,7 @@ class CameraFormController extends Controller
     public function edit($id)
     {
         $user = Auth::user();
+        if (!$user) abort(401);
 
         $audit = Audit::with([
             'store',
@@ -209,9 +202,11 @@ class CameraFormController extends Controller
             'cameraForms.notes.attachments',
         ])->findOrFail($id);
 
-        if (!$user->isAdmin() && !$user->canAccessAudit($audit)) {
+        if (!$user->canAccessAudit($audit)) {
             abort(403, 'Unauthorized');
         }
+
+        $allowedStoreIds = $user->allowedStoreIdsCached();
 
         $entities = Entity::with('category')
             ->where('active', true)
@@ -221,12 +216,7 @@ class CameraFormController extends Controller
 
         $ratings = Rating::orderBy('id')->get();
 
-        if ($user->isAdmin()) {
-            $stores = Store::orderBy('store')->get();
-        } else {
-            $userGroups = $user->getGroupNumbers();
-            $stores = Store::whereIn('group', $userGroups)->orderBy('store')->get();
-        }
+        $stores = Store::whereIn('id', $allowedStoreIds)->orderBy('store')->get();
 
         return Inertia::render('CameraForms/Edit', [
             'audit' => $audit,
@@ -239,23 +229,26 @@ class CameraFormController extends Controller
     public function update(UpdateCameraFormRequest $request, $id)
     {
         $user = Auth::user();
+        if (!$user) abort(401);
 
         $audit = Audit::with(['cameraForms.notes.attachments'])->findOrFail($id);
 
-        if (!$user->isAdmin() && !$user->canAccessAudit($audit)) {
+        if (!$user->canAccessAudit($audit)) {
             abort(403, 'Unauthorized');
         }
 
-        $store = Store::findOrFail($request->store_id);
-        if (!$user->isAdmin() && !$user->hasGroupAccess($store->group)) {
+        $storeId = (int) $request->store_id;
+        if (!$user->canAccessStoreId($storeId)) {
             abort(403, 'Unauthorized');
         }
+
+        $store = Store::findOrFail($storeId);
 
         DB::beginTransaction();
 
         try {
             $audit->update([
-                'store_id' => $request->store_id,
+                'store_id' => $storeId,
                 'date' => $request->date,
             ]);
 
@@ -274,13 +267,12 @@ class CameraFormController extends Controller
                     $cameraForm = new CameraForm();
                     $cameraForm->audit_id = $audit->id;
                     $cameraForm->entity_id = $entityId;
-                    $cameraForm->user_id = Auth::id();
+                    $cameraForm->user_id = (int) Auth::id();
                 }
 
                 $cameraForm->rating_id = $entityData['rating_id'] ?? null;
                 $cameraForm->save();
 
-                // Remove whole notes
                 $removeNoteIds = $entityData['remove_note_ids'] ?? [];
                 if (is_array($removeNoteIds) && count($removeNoteIds) > 0) {
                     $notesToRemove = CameraFormNote::where('camera_form_id', $cameraForm->id)
@@ -297,7 +289,6 @@ class CameraFormController extends Controller
                     }
                 }
 
-                // Upsert notes
                 $notes = $entityData['notes'] ?? [];
                 $keptNoteIds = [];
 
@@ -313,7 +304,6 @@ class CameraFormController extends Controller
                         $removeAttachmentIds = $noteRow['remove_attachment_ids'] ?? [];
                         $wantsRemoveAtt = is_array($removeAttachmentIds) && count($removeAttachmentIds) > 0;
 
-                        // If this note row is totally empty AND is new AND no removals -> skip it
                         if (!$noteId && $noteTrim === '' && !$hasImages && !$wantsRemoveAtt) {
                             continue;
                         }
@@ -338,7 +328,6 @@ class CameraFormController extends Controller
 
                         $keptNoteIds[] = $note->id;
 
-                        // remove specific attachments from this note
                         if ($wantsRemoveAtt) {
                             $attsToRemove = CameraFormNoteAttachment::where('camera_form_note_id', $note->id)
                                 ->whereIn('id', $removeAttachmentIds)
@@ -350,7 +339,6 @@ class CameraFormController extends Controller
                             }
                         }
 
-                        // add new uploads
                         if ($hasImages) {
                             $entityModel = Entity::findOrFail($entityId);
                             $seq = $this->nextEntityImageSeq($audit->id, $entityModel->id);
@@ -362,7 +350,6 @@ class CameraFormController extends Controller
                             }
                         }
 
-                        // if note becomes empty (no text + no attachments) -> delete it
                         $note->load('attachments');
                         $hasAnything = (is_string($note->note) && trim($note->note) !== '') || ($note->attachments->count() > 0);
                         if (!$hasAnything) {
@@ -376,7 +363,6 @@ class CameraFormController extends Controller
                     }
                 }
 
-                // If cameraForm is empty now (no rating + no notes) delete it
                 $cameraForm->load('notes.attachments');
                 $hasNotes = $cameraForm->notes->count() > 0;
 
@@ -385,7 +371,6 @@ class CameraFormController extends Controller
                 }
             }
 
-            // Delete camera_forms not submitted
             CameraForm::where('audit_id', $audit->id)
                 ->whereNotIn('entity_id', $submittedEntityIds)
                 ->with('notes.attachments')
@@ -416,10 +401,11 @@ class CameraFormController extends Controller
     public function destroy($id)
     {
         $user = Auth::user();
+        if (!$user) abort(401);
 
         $audit = Audit::with(['cameraForms.notes.attachments'])->findOrFail($id);
 
-        if (!$user->isAdmin() && !$user->canAccessAudit($audit)) {
+        if (!$user->canAccessAudit($audit)) {
             abort(403, 'Unauthorized');
         }
 
@@ -448,6 +434,7 @@ class CameraFormController extends Controller
     public function show($id)
     {
         $user = Auth::user();
+        if (!$user) abort(401);
 
         $audit = Audit::with([
             'store',
@@ -457,7 +444,7 @@ class CameraFormController extends Controller
             'cameraForms.notes.attachments',
         ])->findOrFail($id);
 
-        if (!$user->isAdmin() && !$user->canAccessAudit($audit)) {
+        if (!$user->canAccessAudit($audit)) {
             abort(403, 'Unauthorized');
         }
 
@@ -479,10 +466,6 @@ class CameraFormController extends Controller
         return $slug !== '' ? $slug : ('entity-' . $entity->id);
     }
 
-    /**
-     * Next sequence number for naming: entity-1, entity-2...
-     * computed across ALL note attachments for this audit+entity.
-     */
     private function nextEntityImageSeq(int $auditId, int $entityId): int
     {
         $count = DB::table('camera_form_note_attachments as a')
@@ -498,7 +481,7 @@ class CameraFormController extends Controller
     private function storeImageWithNaming(
         \Illuminate\Http\UploadedFile $file,
         Store $store,
-        string $date,       // YYYY-MM-DD
+        string $date,
         Entity $entity,
         int $seq
     ): string {
@@ -509,7 +492,6 @@ class CameraFormController extends Controller
 
         $filename = "{$entityBase}-{$seq}.{$ext}";
 
-        // putFileAs returns the relative path inside the disk
         return $file->storeAs($baseFolder, $filename, 'public');
     }
 }
