@@ -10,7 +10,7 @@ class UserUpdatedHandler implements EventHandlerInterface
 {
     public function handle(array $event): void
     {
-        \Log::debug("UserUpdatedHandler: handling event", ['event' => $event]);
+        throw new \Exception('the event is' . json_encode($event));
         $id = $this->asInt(data_get($event, 'data.user_id') ?? data_get($event, 'user_id'));
 
         // fallback if some producers send data.user.id
