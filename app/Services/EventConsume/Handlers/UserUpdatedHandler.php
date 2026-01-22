@@ -5,11 +5,13 @@ namespace App\Services\EventConsume\Handlers;
 use App\Models\User;
 use App\Services\EventConsume\EventHandlerInterface;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class UserUpdatedHandler implements EventHandlerInterface
 {
     public function handle(array $event): void
     {
+        // Optional: keep your payload log (helps confirm handler is receiving what you expect)
         $this->dumpEventPayload($event);
 
         $id = $this->asInt(data_get($event, 'data.user_id') ?? data_get($event, 'user_id'));
@@ -23,26 +25,19 @@ class UserUpdatedHandler implements EventHandlerInterface
             throw new \Exception('UserUpdatedHandler: missing/invalid user id');
         }
 
-        // Pull changed_fields (delta payload)
         $changed = data_get($event, 'data.changed_fields');
         if (!is_array($changed)) {
             $changed = [];
         }
 
-        /**
-         * Extract ONLY the "to" values in a safe way:
-         * - If name.to is scalar => use it
-         * - If name is scalar (some producers) => use it
-         * - If anything is array/object => ignore (prevents Array->string conversions)
-         */
+        // Extract safe scalar "to" values
         $nameTo  = $this->extractDeltaToScalar($changed, 'name');
         $emailTo = $this->extractDeltaToScalar($changed, 'email');
 
         DB::transaction(function () use ($id, $nameTo, $emailTo) {
-            $user = User::query()->find($id);
-
             // IMPORTANT: do not create users here (bus is source of truth)
-            if (!$user) {
+            $exists = User::query()->whereKey($id)->exists();
+            if (!$exists) {
                 throw new \Exception("UserUpdatedHandler: user {$id} not synced yet");
             }
 
@@ -56,48 +51,35 @@ class UserUpdatedHandler implements EventHandlerInterface
                 $update['email'] = $emailTo;
             }
 
-            if (!empty($update)) {
-                $user->update($update);
+            if (empty($update)) {
+                return;
             }
+
+            /**
+             * ✅ CRITICAL FIX:
+             * Use Query Builder update to bypass:
+             * - Eloquent casts/mutators
+             * - model observers
+             * - package hooks
+             *
+             * This prevents any downstream logic from causing "Array to string conversion".
+             */
+            DB::table('users')
+                ->where('id', $id)
+                ->update($update);
         });
     }
 
-    private function dumpEventPayload(array $event): void
-    {
-        try {
-            $eventId = (string) ($event['id'] ?? '');
-            $subject = (string) ($event['subject'] ?? $event['type'] ?? '');
-            $time    = (string) ($event['time'] ?? '');
-
-            $logger = \Log::build([
-                'driver' => 'single',
-                'path' => storage_path('logs/event-payloads.log'),
-                'level' => 'info',
-            ]);
-
-            // Log both structured + raw JSON string
-            $logger->info('Inbound event payload (UserUpdatedHandler)', [
-                'event_id' => $eventId,
-                'subject' => $subject,
-                'time' => $time,
-                'payload_json' => json_encode($event, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
-            ]);
-        } catch (\Throwable $e) {
-            // If logging fails, do NOT break consumption
-            \Log::warning('UserUpdatedHandler: failed dumping payload', [
-                'error' => $e->getMessage(),
-                'exception' => get_class($e),
-            ]);
-        }
-    }
     /**
+     * Extract the delta "to" value safely.
+     *
      * Supports:
      *  changed_fields[field] = ['from' => X, 'to' => Y]
      *  changed_fields[field] = 'value'
      *
      * Returns:
-     *  - string if value is scalar
-     *  - null if missing or array/object
+     *  - string if scalar
+     *  - null otherwise
      */
     private function extractDeltaToScalar(array $changed, string $field): ?string
     {
@@ -120,11 +102,11 @@ class UserUpdatedHandler implements EventHandlerInterface
                 return (string) $to;
             }
 
-            // array/object => ignore safely
+            // array/object -> ignore
             return null;
         }
 
-        // Some producers might send direct scalar values
+        // Direct scalar
         if (is_string($v)) {
             $v = trim($v);
             return $v === '' ? null : $v;
@@ -134,8 +116,34 @@ class UserUpdatedHandler implements EventHandlerInterface
             return (string) $v;
         }
 
-        // array/object => ignore safely
         return null;
+    }
+
+    /**
+     * Writes full payload to: storage/logs/event-payloads.log
+     */
+    private function dumpEventPayload(array $event): void
+    {
+        try {
+            $eventId = (string) ($event['id'] ?? '');
+            $subject = (string) ($event['subject'] ?? $event['type'] ?? '');
+            $time    = (string) ($event['time'] ?? '');
+
+            $logger = Log::build([
+                'driver' => 'single',
+                'path' => storage_path('logs/event-payloads.log'),
+                'level' => 'info',
+            ]);
+
+            $logger->info('Inbound event payload (UserUpdatedHandler)', [
+                'event_id' => $eventId,
+                'subject' => $subject,
+                'time' => $time,
+                'payload_json' => json_encode($event, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+            ]);
+        } catch (\Throwable $e) {
+            // never break the consumer because logging failed
+        }
     }
 
     private function asInt(mixed $v): int
