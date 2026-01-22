@@ -21,7 +21,6 @@ class UserUpdatedHandler implements EventHandlerInterface
             throw new \Exception('UserUpdatedHandler: missing/invalid user id');
         }
 
-        // Delta-style: data.changed_fields.{field}.{to|from}
         $changed = data_get($event, 'data.changed_fields', []);
         if (!is_array($changed)) {
             $changed = [];
@@ -37,25 +36,75 @@ class UserUpdatedHandler implements EventHandlerInterface
 
             $update = [];
 
-            // Only apply "to" values (delta envelope)
-            $nameTo = data_get($changed, 'name.to');
+            /**
+             * Delta-safe extraction:
+             * - supports: changed_fields.name.to
+             * - supports: changed_fields.name = "Qa"
+             * - ignores arrays/objects that cannot be safely cast to string
+             */
+            $nameTo = $this->deltaToValue($changed, 'name');
             if ($nameTo !== null) {
-                $update['name'] = (string) $nameTo;
+                $update['name'] = $nameTo;
             }
 
-            $emailTo = data_get($changed, 'email.to');
+            $emailTo = $this->deltaToValue($changed, 'email');
             if ($emailTo !== null) {
-                $update['email'] = (string) $emailTo;
+                $update['email'] = $emailTo;
             }
 
-            // Password should generally NOT be synced to downstream services via events.
-            // If you do publish it, it should be handled in a separate secure channel.
-            // So we intentionally do nothing here even if password.to exists.
+            // Password should NOT be synced via events to downstream apps.
+            // Intentionally ignored even if present.
 
             if (!empty($update)) {
                 $user->update($update);
             }
         });
+    }
+
+    /**
+     * Extract the "to" value from a delta payload safely.
+     *
+     * Accepts either:
+     *   changed_fields[field] = ['from' => ..., 'to' => ...]
+     *   changed_fields[field] = <scalar>
+     *
+     * Returns a string for scalar values only.
+     * Returns null if the value is missing or not safely convertible.
+     */
+    private function deltaToValue(array $changed, string $field): ?string
+    {
+        $v = $changed[$field] ?? null;
+
+        // Most common: ['from' => ..., 'to' => ...]
+        if (is_array($v) && array_key_exists('to', $v)) {
+            $to = $v['to'];
+
+            // Only accept scalar "to" values
+            if (is_string($to)) {
+                $to = trim($to);
+                return $to === '' ? null : $to;
+            }
+
+            if (is_int($to) || is_float($to) || is_bool($to)) {
+                return (string) $to;
+            }
+
+            // If "to" is an array/object => do not cast (prevents Array to string conversion)
+            return null;
+        }
+
+        // Some producers might send direct scalar values: changed_fields[field] = "Qa"
+        if (is_string($v)) {
+            $v = trim($v);
+            return $v === '' ? null : $v;
+        }
+
+        if (is_int($v) || is_float($v) || is_bool($v)) {
+            return (string) $v;
+        }
+
+        // Anything else (array/object/null) => ignore safely
+        return null;
     }
 
     private function asInt(mixed $v): int
