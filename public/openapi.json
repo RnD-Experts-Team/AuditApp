@@ -1,0 +1,1697 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "QA Camera Forms API",
+    "version": "1.0.0",
+    "description": "OpenAPI spec generated from the provided Laravel routes/controllers/models.\n\nNotes:\n- All JSON responses follow a wrapper: { status, message, data, errors }.\n- Auth is required for all endpoints (middleware AuthTokenStoreScopeMiddleware)."
+  },
+  "servers": [
+    {
+      "url": "https://qa.lcportal.cloud",
+      "description": "Production"
+    },
+    {
+      "url": "http://localhost",
+      "description": "Local"
+    }
+  ],
+  "tags": [
+    { "name": "Audits" },
+    { "name": "Camera Forms" },
+    { "name": "Camera Reports" },
+    { "name": "Entities" },
+    { "name": "Categories" }
+  ],
+  "security": [{ "bearerAuth": [] }],
+  "paths": {
+    "/api/audits": {
+      "get": {
+        "tags": ["Audits"],
+        "summary": "List audits accessible to the authenticated user",
+        "description": "Returns paginated audits for stores in the user's allowed store scope.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PageParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Audits fetched successfully",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApiSuccessResponse" },
+                "examples": {
+                  "success": {
+                    "value": {
+                      "status": "success",
+                      "message": "Audits fetched successfully",
+                      "data": {
+                        "current_page": 1,
+                        "data": [
+                          {
+                            "id": 91,
+                            "store_id": 12,
+                            "user_id": 5,
+                            "date": "2026-01-20",
+                            "created_at": "2026-01-20T14:22:11.000000Z",
+                            "updated_at": "2026-01-20T14:22:11.000000Z",
+                            "store": {
+                              "id": 12,
+                              "store": "Brooklyn - Atlantic Ave",
+                              "group": 3,
+                              "created_at": "2025-01-01T00:00:00.000000Z",
+                              "updated_at": "2025-01-01T00:00:00.000000Z"
+                            },
+                            "user": {
+                              "id": 5,
+                              "name": "Jane Auditor",
+                              "email": "jane@example.com",
+                              "created_at": "2025-01-01T00:00:00.000000Z",
+                              "updated_at": "2025-01-01T00:00:00.000000Z"
+                            }
+                          }
+                        ],
+                        "first_page_url": "https://your-domain.tld/api/audits?page=1",
+                        "from": 1,
+                        "last_page": 7,
+                        "last_page_url": "https://your-domain.tld/api/audits?page=7",
+                        "links": [
+                          {
+                            "url": null,
+                            "label": "&laquo; Previous",
+                            "active": false
+                          },
+                          {
+                            "url": "https://your-domain.tld/api/audits?page=1",
+                            "label": "1",
+                            "active": true
+                          },
+                          {
+                            "url": "https://your-domain.tld/api/audits?page=2",
+                            "label": "2",
+                            "active": false
+                          },
+                          {
+                            "url": "https://your-domain.tld/api/audits?page=7",
+                            "label": "7",
+                            "active": false
+                          },
+                          {
+                            "url": "https://your-domain.tld/api/audits?page=2",
+                            "label": "Next &raquo;",
+                            "active": false
+                          }
+                        ],
+                        "next_page_url": "https://your-domain.tld/api/audits?page=2",
+                        "path": "https://your-domain.tld/api/audits",
+                        "per_page": 15,
+                        "prev_page_url": null,
+                        "to": 1,
+                        "total": 91
+                      },
+                      "errors": null
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/UnauthorizedJson" },
+          "500": { "$ref": "#/components/responses/InternalServerErrorJson" }
+        }
+      }
+    },
+    "/api/audits/{id}": {
+      "get": {
+        "tags": ["Audits"],
+        "summary": "Show a single audit with camera forms",
+        "parameters": [{ "$ref": "#/components/parameters/IdPathParam" }],
+        "responses": {
+          "200": {
+            "description": "Audit fetched successfully",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApiSuccessResponse" },
+                "examples": {
+                  "success": {
+                    "value": {
+                      "status": "success",
+                      "message": "Audit fetched successfully",
+                      "data": {
+                        "id": 91,
+                        "store_id": 12,
+                        "user_id": 5,
+                        "date": "2026-01-20",
+                        "created_at": "2026-01-20T14:22:11.000000Z",
+                        "updated_at": "2026-01-20T14:22:11.000000Z",
+                        "store": {
+                          "id": 12,
+                          "store": "Brooklyn - Atlantic Ave",
+                          "group": 3,
+                          "created_at": "2025-01-01T00:00:00.000000Z",
+                          "updated_at": "2025-01-01T00:00:00.000000Z"
+                        },
+                        "user": {
+                          "id": 5,
+                          "name": "Jane Auditor",
+                          "email": "jane@example.com",
+                          "created_at": "2025-01-01T00:00:00.000000Z",
+                          "updated_at": "2025-01-01T00:00:00.000000Z"
+                        },
+                        "camera_forms": [
+                          {
+                            "id": 210,
+                            "user_id": 5,
+                            "entity_id": 33,
+                            "audit_id": 91,
+                            "rating_id": 1,
+                            "created_at": "2026-01-20T14:22:11.000000Z",
+                            "updated_at": "2026-01-20T14:22:11.000000Z",
+                            "entity": {
+                              "id": 33,
+                              "entity_label": "Front Door Camera Angle",
+                              "category_id": 4,
+                              "date_range_type": "daily",
+                              "report_type": "main",
+                              "sort_order": 10,
+                              "active": true,
+                              "created_at": "2025-01-01T00:00:00.000000Z",
+                              "updated_at": "2025-01-01T00:00:00.000000Z",
+                              "category": {
+                                "id": 4,
+                                "label": "Entrance",
+                                "sort_order": 1,
+                                "created_at": "2025-01-01T00:00:00.000000Z",
+                                "updated_at": "2025-01-01T00:00:00.000000Z"
+                              }
+                            },
+                            "rating": {
+                              "id": 1,
+                              "label": "Pass",
+                              "created_at": "2025-01-01T00:00:00.000000Z",
+                              "updated_at": "2025-01-01T00:00:00.000000Z"
+                            },
+                            "notes": [
+                              {
+                                "id": 501,
+                                "camera_form_id": 210,
+                                "note": "Slight glare; adjust exposure.",
+                                "created_at": "2026-01-20T14:22:11.000000Z",
+                                "updated_at": "2026-01-20T14:22:11.000000Z",
+                                "attachments": [
+                                  {
+                                    "id": 9001,
+                                    "camera_form_note_id": 501,
+                                    "path": "camera_forms/stores/12-brooklyn-atlantic-ave/2026-01-20/front-door-camera-angle-1.jpg",
+                                    "created_at": "2026-01-20T14:22:11.000000Z",
+                                    "updated_at": "2026-01-20T14:22:11.000000Z",
+                                    "url": "https://your-domain.tld/storage/camera_forms/stores/12-brooklyn-atlantic-ave/2026-01-20/front-door-camera-angle-1.jpg"
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      "errors": null
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/UnauthorizedJson" },
+          "403": { "$ref": "#/components/responses/ForbiddenJson" },
+          "404": { "$ref": "#/components/responses/NotFoundJson" },
+          "500": { "$ref": "#/components/responses/InternalServerErrorJson" }
+        }
+      }
+    },
+    "/api/camera-forms": {
+      "get": {
+        "tags": ["Camera Forms"],
+        "summary": "List audits that contain camera forms (filtered by date_range_type and optional filters)",
+        "parameters": [
+          { "$ref": "#/components/parameters/PageParam" },
+          {
+            "name": "date_range_type",
+            "in": "query",
+            "description": "Filters audits to those that have camera forms whose entity.date_range_type matches this value.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["daily", "weekly"],
+              "default": "daily"
+            }
+          },
+          {
+            "name": "date_from",
+            "in": "query",
+            "description": "Filter audits by date >= date_from (YYYY-MM-DD).",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "example": "2026-01-01"
+            }
+          },
+          {
+            "name": "date_to",
+            "in": "query",
+            "description": "Filter audits by date <= date_to (YYYY-MM-DD).",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "example": "2026-01-31"
+            }
+          },
+          {
+            "name": "store_id",
+            "in": "query",
+            "description": "Filter audits by store_id.",
+            "required": false,
+            "schema": { "type": "integer", "example": 12 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Camera forms fetched successfully (paginated audits)",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApiSuccessResponse" },
+                "examples": {
+                  "success": {
+                    "value": {
+                      "status": "success",
+                      "message": "Camera forms fetched successfully",
+                      "data": {
+                        "current_page": 1,
+                        "data": [
+                          {
+                            "id": 91,
+                            "store_id": 12,
+                            "user_id": 5,
+                            "date": "2026-01-20",
+                            "created_at": "2026-01-20T14:22:11.000000Z",
+                            "updated_at": "2026-01-20T14:22:11.000000Z",
+                            "store": {
+                              "id": 12,
+                              "store": "Brooklyn - Atlantic Ave",
+                              "group": 3
+                            },
+                            "user": {
+                              "id": 5,
+                              "name": "Jane Auditor",
+                              "email": "jane@example.com"
+                            },
+                            "camera_forms": [
+                              {
+                                "id": 210,
+                                "user_id": 5,
+                                "entity_id": 33,
+                                "audit_id": 91,
+                                "rating_id": 1,
+                                "entity": {
+                                  "id": 33,
+                                  "entity_label": "Front Door Camera Angle",
+                                  "category": {
+                                    "id": 4,
+                                    "label": "Entrance",
+                                    "sort_order": 1
+                                  }
+                                },
+                                "rating": { "id": 1, "label": "Pass" },
+                                "notes": [
+                                  {
+                                    "id": 501,
+                                    "camera_form_id": 210,
+                                    "note": "Slight glare; adjust exposure.",
+                                    "attachments": [
+                                      {
+                                        "id": 9001,
+                                        "camera_form_note_id": 501,
+                                        "path": "camera_forms/stores/12-brooklyn-atlantic-ave/2026-01-20/front-door-camera-angle-1.jpg",
+                                        "url": "https://your-domain.tld/storage/camera_forms/stores/12-brooklyn-atlantic-ave/2026-01-20/front-door-camera-angle-1.jpg"
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ],
+                        "per_page": 15,
+                        "total": 1
+                      },
+                      "errors": null
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/UnauthorizedJson" },
+          "500": { "$ref": "#/components/responses/InternalServerErrorJson" }
+        }
+      },
+      "post": {
+        "tags": ["Camera Forms"],
+        "summary": "Create a new audit + camera forms + notes + attachments",
+        "description": "Creates an Audit for the given store/date, then creates CameraForm records for each entity that has at least a rating OR (note/images). Images are stored to the public disk.\n\nImportant: This endpoint accepts multipart/form-data because images are uploaded under entities.*.notes.*.images.*",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/CameraFormStoreRequest"
+              },
+              "examples": {
+                "example": {
+                  "value": {
+                    "store_id": 12,
+                    "date": "2026-01-20",
+                    "entities": [
+                      {
+                        "entity_id": 33,
+                        "rating_id": 1,
+                        "notes": [
+                          {
+                            "note": "Slight glare; adjust exposure."
+                          }
+                        ]
+                      },
+                      {
+                        "entity_id": 34,
+                        "rating_id": 2,
+                        "notes": [
+                          {
+                            "note": "Needs reposition.",
+                            "images": ["(binary file)"]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Camera form created successfully",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApiSuccessResponse" },
+                "examples": {
+                  "created": {
+                    "value": {
+                      "status": "success",
+                      "message": "Camera form created successfully",
+                      "data": {
+                        "id": 91,
+                        "store_id": 12,
+                        "user_id": 5,
+                        "date": "2026-01-20",
+                        "created_at": "2026-01-20T14:22:11.000000Z",
+                        "updated_at": "2026-01-20T14:22:11.000000Z",
+                        "store": {
+                          "id": 12,
+                          "store": "Brooklyn - Atlantic Ave",
+                          "group": 3
+                        },
+                        "camera_forms": [
+                          {
+                            "id": 210,
+                            "user_id": 5,
+                            "entity_id": 33,
+                            "audit_id": 91,
+                            "rating_id": 1,
+                            "notes": [
+                              {
+                                "id": 501,
+                                "camera_form_id": 210,
+                                "note": "Slight glare; adjust exposure.",
+                                "attachments": []
+                              }
+                            ]
+                          },
+                          {
+                            "id": 211,
+                            "user_id": 5,
+                            "entity_id": 34,
+                            "audit_id": 91,
+                            "rating_id": 2,
+                            "notes": [
+                              {
+                                "id": 502,
+                                "camera_form_id": 211,
+                                "note": "Needs reposition.",
+                                "attachments": [
+                                  {
+                                    "id": 9002,
+                                    "camera_form_note_id": 502,
+                                    "path": "camera_forms/stores/12-brooklyn-atlantic-ave/2026-01-20/side-camera-angle-1.jpg",
+                                    "url": "https://your-domain.tld/storage/camera_forms/stores/12-brooklyn-atlantic-ave/2026-01-20/side-camera-angle-1.jpg"
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      "errors": null
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/UnauthorizedJson" },
+          "403": { "$ref": "#/components/responses/ForbiddenJson" },
+          "422": { "$ref": "#/components/responses/ValidationErrorJson" },
+          "500": {
+            "description": "Failed to create camera form",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApiErrorResponse" },
+                "examples": {
+                  "failed": {
+                    "value": {
+                      "status": "error",
+                      "message": "Failed to create camera form",
+                      "data": null,
+                      "errors": null
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/camera-forms/{id}": {
+      "get": {
+        "tags": ["Camera Forms"],
+        "summary": "Show a single audit (camera form bundle) by audit id",
+        "parameters": [{ "$ref": "#/components/parameters/IdPathParam" }],
+        "responses": {
+          "200": {
+            "description": "Camera form fetched successfully",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApiSuccessResponse" },
+                "examples": {
+                  "success": {
+                    "value": {
+                      "status": "success",
+                      "message": "Camera form fetched successfully",
+                      "data": {
+                        "id": 91,
+                        "store_id": 12,
+                        "user_id": 5,
+                        "date": "2026-01-20",
+                        "store": {
+                          "id": 12,
+                          "store": "Brooklyn - Atlantic Ave",
+                          "group": 3
+                        },
+                        "user": {
+                          "id": 5,
+                          "name": "Jane Auditor",
+                          "email": "jane@example.com"
+                        },
+                        "camera_forms": [
+                          {
+                            "id": 210,
+                            "user_id": 5,
+                            "entity_id": 33,
+                            "audit_id": 91,
+                            "rating_id": 1,
+                            "entity": {
+                              "id": 33,
+                              "entity_label": "Front Door Camera Angle",
+                              "category": {
+                                "id": 4,
+                                "label": "Entrance",
+                                "sort_order": 1
+                              }
+                            },
+                            "rating": { "id": 1, "label": "Pass" },
+                            "notes": [
+                              {
+                                "id": 501,
+                                "camera_form_id": 210,
+                                "note": "Slight glare; adjust exposure.",
+                                "attachments": [
+                                  {
+                                    "id": 9001,
+                                    "camera_form_note_id": 501,
+                                    "path": "camera_forms/stores/12-brooklyn-atlantic-ave/2026-01-20/front-door-camera-angle-1.jpg",
+                                    "url": "https://your-domain.tld/storage/camera_forms/stores/12-brooklyn-atlantic-ave/2026-01-20/front-door-camera-angle-1.jpg"
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      "errors": null
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/UnauthorizedJson" },
+          "403": { "$ref": "#/components/responses/ForbiddenJson" },
+          "404": { "$ref": "#/components/responses/NotFoundJson" },
+          "500": { "$ref": "#/components/responses/InternalServerErrorJson" }
+        }
+      },
+      "put": {
+        "tags": ["Camera Forms"],
+        "summary": "Update an audit + associated camera forms/notes/attachments (logic preserved in your codebase)",
+        "description": "Accepts multipart/form-data (images). Your controller indicates the update logic is preserved from the web version; the detailed behavior depends on your trimmed block.\n\nThe request validation supports:\n- entities.*.rating_id\n- entities.*.notes.*.id (existing note id)\n- entities.*.notes.*.remove_attachment_ids (remove attachments)\n- entities.*.remove_note_ids (remove notes)\n- entities.*.notes.*.images.* (new images)\n\nEven if you don't change anything, validation requires at least one entity to have a rating, note, image, or removal.",
+        "parameters": [{ "$ref": "#/components/parameters/IdPathParam" }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/CameraFormUpdateRequest"
+              },
+              "examples": {
+                "example_update_rating_and_remove_attachment": {
+                  "value": {
+                    "store_id": 12,
+                    "date": "2026-01-21",
+                    "entities": [
+                      {
+                        "entity_id": 33,
+                        "rating_id": 2,
+                        "notes": [
+                          {
+                            "id": 501,
+                            "note": "Updated note text",
+                            "remove_attachment_ids": [9001]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Camera form updated successfully",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApiSuccessResponse" },
+                "examples": {
+                  "success": {
+                    "value:": {
+                      "status": "success",
+                      "message": "Camera form updated successfully",
+                      "data": {
+                        "id": 91,
+                        "store_id": 12,
+                        "user_id": 5,
+                        "date": "2026-01-21",
+                        "camera_forms": [
+                          {
+                            "id": 210,
+                            "entity_id": 33,
+                            "rating_id": 2,
+                            "notes": [
+                              {
+                                "id": 501,
+                                "note": "Updated note text",
+                                "attachments": []
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      "errors": null
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/UnauthorizedJson" },
+          "403": { "$ref": "#/components/responses/ForbiddenJson" },
+          "404": { "$ref": "#/components/responses/NotFoundJson" },
+          "422": { "$ref": "#/components/responses/ValidationErrorJson" },
+          "500": {
+            "description": "Failed to update camera form",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApiErrorResponse" },
+                "examples": {
+                  "failed": {
+                    "value": {
+                      "status": "error",
+                      "message": "Failed to update camera form",
+                      "data": null,
+                      "errors": null
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": ["Camera Forms"],
+        "summary": "Delete an audit and all associated camera forms, notes, and attachments",
+        "parameters": [{ "$ref": "#/components/parameters/IdPathParam" }],
+        "responses": {
+          "200": {
+            "description": "Camera form deleted successfully",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApiSuccessResponse" },
+                "examples": {
+                  "success": {
+                    "value": {
+                      "status": "success",
+                      "message": "Camera form deleted successfully",
+                      "data": null,
+                      "errors": null
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/UnauthorizedJson" },
+          "403": { "$ref": "#/components/responses/ForbiddenJson" },
+          "404": { "$ref": "#/components/responses/NotFoundJson" },
+          "500": { "$ref": "#/components/responses/InternalServerErrorJson" }
+        }
+      }
+    },
+    "/api/camera-reports": {
+      "get": {
+        "tags": ["Camera Reports"],
+        "summary": "Generate camera report data (dashboard payload)",
+        "parameters": [
+          {
+            "name": "store_id",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "example": 12 }
+          },
+          {
+            "name": "group",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "example": 3 }
+          },
+          {
+            "name": "report_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["main", "secondary"],
+              "example": "main"
+            }
+          },
+          {
+            "name": "date_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "example": "2026-01-01"
+            }
+          },
+          {
+            "name": "date_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "example": "2026-01-31"
+            }
+          },
+          {
+            "name": "rating_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "example": 2,
+              "description": "If present, includes ONLY stores that have at least one row with this rating_id; but keeps all rows for those stores."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Camera report generated",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApiSuccessResponse" },
+                "examples": {
+                  "success": {
+                    "value": {
+                      "status": "success",
+                      "message": "Camera report generated",
+                      "data": {
+                        "report": {
+                          "summary": [
+                            {
+                              "store_id": 12,
+                              "store_name": "Brooklyn - Atlantic Ave",
+                              "store_group": 3,
+                              "entities": {
+                                "33": {
+                                  "entity_id": 33,
+                                  "entity_label": "Front Door Camera Angle",
+                                  "rating_counts": [
+                                    { "rating_label": "Pass", "count": 3 },
+                                    { "rating_label": "Fail", "count": 1 }
+                                  ],
+                                  "notes": [
+                                    "Slight glare; adjust exposure.",
+                                    "Angle is good overall."
+                                  ],
+                                  "category": {
+                                    "id": 4,
+                                    "label": "Entrance",
+                                    "sort_order": 1
+                                  }
+                                }
+                              }
+                            }
+                          ],
+                          "entities": [
+                            {
+                              "id": 33,
+                              "entity_label": "Front Door Camera Angle",
+                              "category_id": 4,
+                              "date_range_type": "daily",
+                              "report_type": "main",
+                              "sort_order": 10,
+                              "active": true,
+                              "category": {
+                                "id": 4,
+                                "label": "Entrance",
+                                "sort_order": 1
+                              }
+                            }
+                          ],
+                          "total_stores": 1,
+                          "scoreData": {
+                            "12": {
+                              "score_without_auto_fail": 0.75,
+                              "score_with_auto_fail": 0.75
+                            }
+                          }
+                        },
+                        "stores": [
+                          {
+                            "id": 12,
+                            "store": "Brooklyn - Atlantic Ave",
+                            "group": 3
+                          }
+                        ],
+                        "groups": [3, 4, 5],
+                        "ratings": [
+                          { "id": 1, "label": "Pass" },
+                          { "id": 2, "label": "Fail" },
+                          { "id": 3, "label": "Auto Fail" }
+                        ],
+                        "filters": {
+                          "store_id": 12,
+                          "group": null,
+                          "report_type": "main",
+                          "date_from": "2026-01-01",
+                          "date_to": "2026-01-31",
+                          "rating_id": null
+                        }
+                      },
+                      "errors": null
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/UnauthorizedJson" },
+          "500": { "$ref": "#/components/responses/InternalServerErrorJson" }
+        }
+      }
+    },
+    "/api/camera-reports/export": {
+      "get": {
+        "tags": ["Camera Reports"],
+        "summary": "Export camera report as ZIP containing XLSX + attachments",
+        "parameters": [
+          {
+            "name": "store_id",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "example": 12 }
+          },
+          {
+            "name": "group",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "example": 3 }
+          },
+          {
+            "name": "report_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["main", "secondary"],
+              "example": "main"
+            }
+          },
+          {
+            "name": "date_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "example": "2026-01-01"
+            }
+          },
+          {
+            "name": "date_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "example": "2026-01-31"
+            }
+          },
+          {
+            "name": "rating_id",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "example": 2 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "ZIP file download",
+            "content": {
+              "application/zip": {
+                "schema": { "type": "string", "format": "binary" },
+                "examples": {
+                  "zip": {
+                    "summary": "A ZIP containing camera-report_YYYY-MM-DD.xlsx and attachments under stores/{store_id}-{slug}/{date}/",
+                    "value": "(binary)"
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Content-Disposition": {
+                "description": "attachment; filename=\"camera-report_YYYY-MM-DD.zip\"",
+                "schema": { "type": "string" }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized (export uses abort(401))",
+            "content": {
+              "text/plain": {
+                "schema": { "type": "string" },
+                "examples": {
+                  "unauthorized": { "value": "Unauthorized." }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Failed to create ZIP or internal error",
+            "content": {
+              "text/plain": {
+                "schema": { "type": "string" },
+                "examples": {
+                  "failed_zip": { "value": "Failed to create ZIP" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/entities": {
+      "get": {
+        "tags": ["Entities"],
+        "summary": "List entities and categories for management",
+        "responses": {
+          "200": {
+            "description": "Entities fetched successfully",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApiSuccessResponse" },
+                "examples": {
+                  "success": {
+                    "value": {
+                      "status": "success",
+                      "message": "Entities fetched successfully",
+                      "data": {
+                        "entities": [
+                          {
+                            "id": 33,
+                            "entity_label": "Front Door Camera Angle",
+                            "category_id": 4,
+                            "date_range_type": "daily",
+                            "report_type": "main",
+                            "sort_order": 10,
+                            "active": true,
+                            "created_at": "2025-01-01T00:00:00.000000Z",
+                            "updated_at": "2025-01-01T00:00:00.000000Z",
+                            "category": {
+                              "id": 4,
+                              "label": "Entrance",
+                              "sort_order": 1,
+                              "created_at": "2025-01-01T00:00:00.000000Z",
+                              "updated_at": "2025-01-01T00:00:00.000000Z"
+                            }
+                          }
+                        ],
+                        "categories": [
+                          {
+                            "id": 4,
+                            "label": "Entrance",
+                            "sort_order": 1,
+                            "entities_count": 7,
+                            "created_at": "2025-01-01T00:00:00.000000Z",
+                            "updated_at": "2025-01-01T00:00:00.000000Z"
+                          }
+                        ]
+                      },
+                      "errors": null
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/UnauthorizedJson" },
+          "500": { "$ref": "#/components/responses/InternalServerErrorJson" }
+        }
+      },
+      "post": {
+        "tags": ["Entities"],
+        "summary": "Create new entity",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/EntityUpsertRequest" },
+              "examples": {
+                "create": {
+                  "value": {
+                    "entity_label": "Back Room Camera Coverage",
+                    "category_id": 6,
+                    "date_range_type": "weekly",
+                    "report_type": "secondary",
+                    "sort_order": 20,
+                    "active": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Entity created successfully",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApiSuccessResponse" },
+                "examples": {
+                  "created": {
+                    "value": {
+                      "status": "success",
+                      "message": "Entity created successfully",
+                      "data": {
+                        "id": 101,
+                        "entity_label": "Back Room Camera Coverage",
+                        "category_id": 6,
+                        "date_range_type": "weekly",
+                        "report_type": "secondary",
+                        "sort_order": 20,
+                        "active": true,
+                        "created_at": "2026-01-27T15:00:00.000000Z",
+                        "updated_at": "2026-01-27T15:00:00.000000Z"
+                      },
+                      "errors": null
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/UnauthorizedJson" },
+          "422": { "$ref": "#/components/responses/ValidationErrorJson" },
+          "500": { "$ref": "#/components/responses/InternalServerErrorJson" }
+        }
+      }
+    },
+    "/api/entities/{id}": {
+      "put": {
+        "tags": ["Entities"],
+        "summary": "Update entity",
+        "parameters": [{ "$ref": "#/components/parameters/IdPathParam" }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/EntityUpsertRequest" },
+              "examples": {
+                "update": {
+                  "value": {
+                    "entity_label": "Front Door Camera Angle",
+                    "category_id": 4,
+                    "date_range_type": "daily",
+                    "report_type": "main",
+                    "sort_order": 10,
+                    "active": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Entity updated successfully",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApiSuccessResponse" },
+                "examples": {
+                  "success": {
+                    "value": {
+                      "status": "success",
+                      "message": "Entity updated successfully",
+                      "data": {
+                        "id": 33,
+                        "entity_label": "Front Door Camera Angle",
+                        "category_id": 4,
+                        "date_range_type": "daily",
+                        "report_type": "main",
+                        "sort_order": 10,
+                        "active": true,
+                        "created_at": "2025-01-01T00:00:00.000000Z",
+                        "updated_at": "2026-01-27T15:05:00.000000Z"
+                      },
+                      "errors": null
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/UnauthorizedJson" },
+          "404": { "$ref": "#/components/responses/NotFoundJson" },
+          "422": { "$ref": "#/components/responses/ValidationErrorJson" },
+          "500": { "$ref": "#/components/responses/InternalServerErrorJson" }
+        }
+      },
+      "delete": {
+        "tags": ["Entities"],
+        "summary": "Delete entity if unused",
+        "parameters": [{ "$ref": "#/components/parameters/IdPathParam" }],
+        "responses": {
+          "200": {
+            "description": "Entity deleted successfully",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApiSuccessResponse" },
+                "examples": {
+                  "success": {
+                    "value": {
+                      "status": "success",
+                      "message": "Entity deleted successfully",
+                      "data": null,
+                      "errors": null
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/UnauthorizedJson" },
+          "404": { "$ref": "#/components/responses/NotFoundJson" },
+          "422": {
+            "description": "Cannot delete entity with existing camera forms.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApiErrorResponse" },
+                "examples": {
+                  "has_camera_forms": {
+                    "value": {
+                      "status": "error",
+                      "message": "Cannot delete entity with existing camera forms.",
+                      "data": null,
+                      "errors": null
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Failed to delete entity",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApiErrorResponse" },
+                "examples": {
+                  "failed": {
+                    "value": {
+                      "status": "error",
+                      "message": "Failed to delete entity",
+                      "data": null,
+                      "errors": null
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/categories": {
+      "post": {
+        "tags": ["Categories"],
+        "summary": "Create category",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CategoryUpsertRequest"
+              },
+              "examples": {
+                "create": {
+                  "value": {
+                    "label": "Entrance",
+                    "sort_order": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Category created successfully",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApiSuccessResponse" },
+                "examples": {
+                  "created": {
+                    "value": {
+                      "status": "success",
+                      "message": "Category created successfully",
+                      "data": {
+                        "id": 4,
+                        "label": "Entrance",
+                        "sort_order": 1,
+                        "created_at": "2026-01-27T15:10:00.000000Z",
+                        "updated_at": "2026-01-27T15:10:00.000000Z"
+                      },
+                      "errors": null
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/UnauthorizedJson" },
+          "422": { "$ref": "#/components/responses/ValidationErrorJson" },
+          "500": { "$ref": "#/components/responses/InternalServerErrorJson" }
+        }
+      }
+    },
+    "/api/categories/{id}": {
+      "put": {
+        "tags": ["Categories"],
+        "summary": "Update category",
+        "parameters": [{ "$ref": "#/components/parameters/IdPathParam" }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CategoryUpsertRequest"
+              },
+              "examples": {
+                "update": {
+                  "value": {
+                    "label": "Entrance",
+                    "sort_order": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Category updated successfully",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApiSuccessResponse" },
+                "examples": {
+                  "success": {
+                    "value": {
+                      "status": "success",
+                      "message": "Category updated successfully",
+                      "data": {
+                        "id": 4,
+                        "label": "Entrance",
+                        "sort_order": 1,
+                        "created_at": "2025-01-01T00:00:00.000000Z",
+                        "updated_at": "2026-01-27T15:15:00.000000Z"
+                      },
+                      "errors": null
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/UnauthorizedJson" },
+          "404": { "$ref": "#/components/responses/NotFoundJson" },
+          "422": { "$ref": "#/components/responses/ValidationErrorJson" },
+          "500": { "$ref": "#/components/responses/InternalServerErrorJson" }
+        }
+      },
+      "delete": {
+        "tags": ["Categories"],
+        "summary": "Delete category (only if it has no entities)",
+        "parameters": [{ "$ref": "#/components/parameters/IdPathParam" }],
+        "responses": {
+          "200": {
+            "description": "Category deleted successfully",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApiSuccessResponse" },
+                "examples": {
+                  "success": {
+                    "value": {
+                      "status": "success",
+                      "message": "Category deleted successfully",
+                      "data": null,
+                      "errors": null
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/UnauthorizedJson" },
+          "404": { "$ref": "#/components/responses/NotFoundJson" },
+          "422": {
+            "description": "Cannot delete category with existing entities.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApiErrorResponse" },
+                "examples": {
+                  "has_entities": {
+                    "value": {
+                      "status": "error",
+                      "message": "Cannot delete category with existing entities.",
+                      "data": null,
+                      "errors": null
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Failed to delete category",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApiErrorResponse" },
+                "examples": {
+                  "failed": {
+                    "value": {
+                      "status": "error",
+                      "message": "Failed to delete category",
+                      "data": null,
+                      "errors": null
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "parameters": {
+      "IdPathParam": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "schema": { "type": "integer", "minimum": 1 },
+        "example": 91
+      },
+      "PageParam": {
+        "name": "page",
+        "in": "query",
+        "required": false,
+        "schema": { "type": "integer", "minimum": 1, "default": 1 },
+        "example": 1
+      }
+    },
+    "responses": {
+      "UnauthorizedJson": {
+        "description": "Unauthorized",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ApiErrorResponse" },
+            "examples": {
+              "unauthorized": {
+                "value": {
+                  "status": "error",
+                  "message": "Unauthorized",
+                  "data": null,
+                  "errors": null
+                }
+              }
+            }
+          }
+        }
+      },
+      "ForbiddenJson": {
+        "description": "Forbidden",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ApiErrorResponse" },
+            "examples": {
+              "forbidden": {
+                "value": {
+                  "status": "error",
+                  "message": "Forbidden",
+                  "data": null,
+                  "errors": null
+                }
+              }
+            }
+          }
+        }
+      },
+      "NotFoundJson": {
+        "description": "Not Found (Model not found / route not found)",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/LaravelNotFoundResponse"
+            },
+            "examples": {
+              "model_not_found": {
+                "value": {
+                  "message": "No query results for model [App\\\\Models\\\\Audit] 999999"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ValidationErrorJson": {
+        "description": "Validation error (Laravel 422)",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/LaravelValidationErrorResponse"
+            },
+            "examples": {
+              "validation_failed": {
+                "value": {
+                  "message": "The given data was invalid.",
+                  "errors": {
+                    "store_id": ["The selected store id is invalid."],
+                    "entities": [
+                      "At least one entity must have a rating, note, or image."
+                    ],
+                    "entities.0.entity_id": [
+                      "The selected entities.0.entity_id is invalid."
+                    ],
+                    "entities.0.notes.0.images.0": [
+                      "The entities.0.notes.0.images.0 must be an image.",
+                      "The entities.0.notes.0.images.0 may not be greater than 5120 kilobytes."
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "InternalServerErrorJson": {
+        "description": "Internal Server Error",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ApiErrorResponse" },
+            "examples": {
+              "server_error": {
+                "value": {
+                  "status": "error",
+                  "message": "Server Error",
+                  "data": null,
+                  "errors": null
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "ApiSuccessResponse": {
+        "type": "object",
+        "required": ["status", "message", "data", "errors"],
+        "properties": {
+          "status": { "type": "string", "enum": ["success"] },
+          "message": { "type": "string" },
+          "data": {},
+          "errors": { "type": ["object", "null"], "default": null }
+        }
+      },
+      "ApiErrorResponse": {
+        "type": "object",
+        "required": ["status", "message", "data", "errors"],
+        "properties": {
+          "status": { "type": "string", "enum": ["error"] },
+          "message": { "type": "string" },
+          "data": {
+            "type": ["object", "array", "string", "number", "boolean", "null"],
+            "default": null
+          },
+          "errors": {
+            "type": ["object", "array", "string", "null"],
+            "default": null
+          }
+        }
+      },
+      "LaravelValidationErrorResponse": {
+        "type": "object",
+        "required": ["message", "errors"],
+        "properties": {
+          "message": {
+            "type": "string",
+            "example": "The given data was invalid."
+          },
+          "errors": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        }
+      },
+      "LaravelNotFoundResponse": {
+        "type": "object",
+        "required": ["message"],
+        "properties": {
+          "message": { "type": "string" }
+        }
+      },
+      "CameraFormStoreRequest": {
+        "type": "object",
+        "required": ["store_id", "date", "entities"],
+        "properties": {
+          "store_id": { "type": "integer", "example": 12 },
+          "date": {
+            "type": "string",
+            "format": "date",
+            "example": "2026-01-20"
+          },
+          "entities": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/components/schemas/CameraFormEntityCreateRow"
+            }
+          }
+        }
+      },
+      "CameraFormEntityCreateRow": {
+        "type": "object",
+        "required": ["entity_id"],
+        "properties": {
+          "entity_id": { "type": "integer", "example": 33 },
+          "rating_id": { "type": ["integer", "null"], "example": 1 },
+          "notes": {
+            "type": ["array", "null"],
+            "items": { "$ref": "#/components/schemas/CameraFormNoteCreateRow" }
+          }
+        }
+      },
+      "CameraFormNoteCreateRow": {
+        "type": "object",
+        "properties": {
+          "note": {
+            "type": ["string", "null"],
+            "example": "Slight glare; adjust exposure."
+          },
+          "images": {
+            "type": ["array", "null"],
+            "description": "Multipart array of uploaded image files.",
+            "items": { "type": "string", "format": "binary" }
+          }
+        }
+      },
+      "CameraFormUpdateRequest": {
+        "type": "object",
+        "required": ["store_id", "date", "entities"],
+        "properties": {
+          "store_id": { "type": "integer", "example": 12 },
+          "date": {
+            "type": "string",
+            "format": "date",
+            "example": "2026-01-21"
+          },
+          "entities": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/components/schemas/CameraFormEntityUpdateRow"
+            }
+          }
+        }
+      },
+      "CameraFormEntityUpdateRow": {
+        "type": "object",
+        "required": ["entity_id"],
+        "properties": {
+          "entity_id": { "type": "integer", "example": 33 },
+          "rating_id": { "type": ["integer", "null"], "example": 2 },
+          "notes": {
+            "type": ["array", "null"],
+            "items": { "$ref": "#/components/schemas/CameraFormNoteUpdateRow" }
+          },
+          "remove_note_ids": {
+            "type": ["array", "null"],
+            "items": { "type": "integer" },
+            "example": [501]
+          }
+        }
+      },
+      "CameraFormNoteUpdateRow": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": ["integer", "null"],
+            "example": 501,
+            "description": "Existing note id (optional)."
+          },
+          "note": {
+            "type": ["string", "null"],
+            "example": "Updated note text"
+          },
+          "images": {
+            "type": ["array", "null"],
+            "items": { "type": "string", "format": "binary" }
+          },
+          "remove_attachment_ids": {
+            "type": ["array", "null"],
+            "items": { "type": "integer" },
+            "example": [9001]
+          }
+        }
+      },
+      "EntityUpsertRequest": {
+        "type": "object",
+        "required": ["entity_label", "date_range_type", "active"],
+        "properties": {
+          "entity_label": {
+            "type": "string",
+            "maxLength": 255,
+            "example": "Front Door Camera Angle"
+          },
+          "category_id": { "type": ["integer", "null"], "example": 4 },
+          "date_range_type": {
+            "type": "string",
+            "enum": ["daily", "weekly"],
+            "example": "daily"
+          },
+          "report_type": {
+            "type": ["string", "null"],
+            "enum": ["main", "secondary", null],
+            "example": "main"
+          },
+          "sort_order": {
+            "type": ["integer", "null"],
+            "minimum": 0,
+            "example": 10
+          },
+          "active": { "type": "boolean", "example": true }
+        }
+      },
+      "CategoryUpsertRequest": {
+        "type": "object",
+        "required": ["label"],
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 255,
+            "example": "Entrance"
+          },
+          "sort_order": {
+            "type": ["integer", "null"],
+            "minimum": 0,
+            "example": 1
+          }
+        }
+      }
+    }
+  }
+}
