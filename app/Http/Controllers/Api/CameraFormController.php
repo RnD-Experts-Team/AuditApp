@@ -28,9 +28,7 @@ class CameraFormController extends Controller
     public function index(Request $request)
     {
         $user = Auth::user();
-        if (!$user) {
-            return $this->unauthorized();
-        }
+        
 
         $allowedStoreIds = $user->allowedStoreIdsCached();
         $dateRangeType = $request->input('date_range_type', 'daily');
@@ -72,15 +70,10 @@ class CameraFormController extends Controller
     public function store(StoreCameraFormRequest $request)
     {
         $user = Auth::user();
-        if (!$user) {
-            return $this->unauthorized();
-        }
-
+       
         $storeId = (int) $request->store_id;
 
-        if (!$user->canAccessStoreId($storeId)) {
-            return $this->forbidden();
-        }
+        
 
         $store = Store::findOrFail($storeId);
 
@@ -163,10 +156,7 @@ class CameraFormController extends Controller
     public function show(int $id)
     {
         $user = Auth::user();
-        if (!$user) {
-            return $this->unauthorized();
-        }
-
+        
         $audit = Audit::with([
             'store',
             'user',
@@ -175,9 +165,7 @@ class CameraFormController extends Controller
             'cameraForms.notes.attachments',
         ])->findOrFail($id);
 
-        if (!$user->canAccessAudit($audit)) {
-            return $this->forbidden();
-        }
+        
 
         return $this->success('Camera form fetched successfully', $audit);
     }
@@ -188,15 +176,11 @@ class CameraFormController extends Controller
     public function update(UpdateCameraFormRequest $request, int $id)
     {
         $user = Auth::user();
-        if (!$user) {
-            return $this->unauthorized();
-        }
+        
 
         $audit = Audit::with('cameraForms.notes.attachments')->findOrFail($id);
 
-        if (!$user->canAccessAudit($audit)) {
-            return $this->forbidden();
-        }
+       
 
         DB::beginTransaction();
 
@@ -228,15 +212,11 @@ class CameraFormController extends Controller
     public function destroy(int $id)
     {
         $user = Auth::user();
-        if (!$user) {
-            return $this->unauthorized();
-        }
+        
 
         $audit = Audit::with('cameraForms.notes.attachments')->findOrFail($id);
 
-        if (!$user->canAccessAudit($audit)) {
-            return $this->forbidden();
-        }
+        
 
         foreach ($audit->cameraForms as $cf) {
             foreach ($cf->notes as $note) {
