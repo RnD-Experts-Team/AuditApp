@@ -36,7 +36,7 @@ class CameraReportController extends Controller
     public function index(Request $request)
     {
         $user = Auth::user();
-        if (!$user) {
+         if (!$user) {
             return $this->unauthorized();
         }
 

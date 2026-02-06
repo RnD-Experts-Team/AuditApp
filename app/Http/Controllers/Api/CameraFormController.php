@@ -28,7 +28,7 @@ class CameraFormController extends Controller
     public function index(Request $request)
     {
         $user = Auth::user();
-        if (!$user) {
+         if (!$user) {
             return $this->unauthorized();
         }
 
@@ -75,12 +75,13 @@ class CameraFormController extends Controller
         if (!$user) {
             return $this->unauthorized();
         }
-
         $storeId = (int) $request->store_id;
 
-        if (!$user->canAccessStoreId($storeId)) {
+         if (!$user->canAccessStoreId($storeId)) {
             return $this->forbidden();
         }
+
+        
 
         $store = Store::findOrFail($storeId);
 
@@ -163,10 +164,10 @@ class CameraFormController extends Controller
     public function show(int $id)
     {
         $user = Auth::user();
-        if (!$user) {
+        
+         if (!$user) {
             return $this->unauthorized();
         }
-
         $audit = Audit::with([
             'store',
             'user',
@@ -194,7 +195,7 @@ class CameraFormController extends Controller
 
         $audit = Audit::with('cameraForms.notes.attachments')->findOrFail($id);
 
-        if (!$user->canAccessAudit($audit)) {
+       if (!$user->canAccessAudit($audit)) {
             return $this->forbidden();
         }
 
@@ -228,13 +229,15 @@ class CameraFormController extends Controller
     public function destroy(int $id)
     {
         $user = Auth::user();
+        
         if (!$user) {
             return $this->unauthorized();
         }
 
+
         $audit = Audit::with('cameraForms.notes.attachments')->findOrFail($id);
 
-        if (!$user->canAccessAudit($audit)) {
+         if (!$user->canAccessAudit($audit)) {
             return $this->forbidden();
         }
 
