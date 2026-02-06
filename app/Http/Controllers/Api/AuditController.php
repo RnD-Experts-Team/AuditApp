@@ -7,10 +7,16 @@ use App\Models\Audit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use App\Models\Store;
-
+use App\Services\ScoringService;
 
 class AuditController extends Controller
 {
+        private ScoringService $scoringService;
+
+     public function __construct(ScoringService $scoringService)
+    {
+        $this->scoringService = $scoringService;
+    }
     /**
      * GET /api/audits
      * List audits accessible to the authenticated user
@@ -18,7 +24,9 @@ class AuditController extends Controller
     public function index(Request $request)
     {
         $user = Auth::user();
-       
+       if (!$user) {
+            return $this->unauthorized();
+        }
 
         $allowedStoreIds = $user->allowedStoreIdsCached();
 
@@ -37,7 +45,9 @@ class AuditController extends Controller
     public function show(int $id)
     {
         $user = Auth::user();
-        
+        if (!$user) {
+            return $this->unauthorized();
+        }
 
         $audit = Audit::with([
             'store',
@@ -47,7 +57,9 @@ class AuditController extends Controller
             'cameraForms.rating',
         ])->findOrFail($id);
 
-      
+       if (!$user->canAccessAudit($audit)) {
+            return $this->forbidden();
+        }
 
         return $this->success('Audit fetched successfully', $audit);
     }
@@ -57,7 +69,11 @@ class AuditController extends Controller
  */
 public function summary(string $store_code, string $date)
 {
-    
+     $user = Auth::user();
+        if (!$user) {
+            return $this->unauthorized();
+        }
+
 
     // Validate date format
     if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
@@ -83,7 +99,9 @@ public function summary(string $store_code, string $date)
 
     $store_id = $store->id;
 
-    
+    if (!$user->canAccessAudit($audit)) {
+            return $this->forbidden();
+        }
 
     // Find audit with attachments included
     $audit = Audit::with([
@@ -111,8 +129,9 @@ public function summary(string $store_code, string $date)
     }
 
     // Calculate total score
-    $totalScore = $this->calculateAuditScore($audit);
-
+ $totalScore = $this->scoringService->calculateDailyScore(
+            $audit->cameraForms->all()
+        );
     // Collect autofails with images
     $autofails = $this->collectAutofails($audit);
 
@@ -187,43 +206,7 @@ private function collectAutofails(Audit $audit): array
     return $autofails;
 }
 
-/**
- * Calculate total score (unchanged)
- */
-private function calculateAuditScore(Audit $audit): ?float
-{
-    $pass = 0;
-    $fail = 0;
-    $hasAutoFail = false;
 
-    foreach ($audit->cameraForms as $form) {
-        $ratingLabel = strtolower($form->rating ? $form->rating->label : '');
-        
-        if ($ratingLabel === 'pass') {
-            $pass++;
-        } elseif ($ratingLabel === 'fail') {
-            $fail++;
-        } elseif ($ratingLabel === 'auto fail') {
-            if ($form->entity && $form->entity->date_range_type === 'weekly') {
-                $hasAutoFail = true;
-            }
-        }
-    }
-
-    $denominator = $pass + $fail;
-    
-    if ($denominator === 0) {
-        return null;
-    }
-
-    $scoreWithoutAutoFail = $pass / $denominator;
-
-    if ($hasAutoFail) {
-        return 0.0;
-    }
-
-    return round($scoreWithoutAutoFail, 4);
-}
 
 
 
