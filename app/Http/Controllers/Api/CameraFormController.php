@@ -230,10 +230,16 @@ class CameraFormController extends Controller
     {
         $user = Auth::user();
         
+        if (!$user) {
+            return $this->unauthorized();
+        }
+
 
         $audit = Audit::with('cameraForms.notes.attachments')->findOrFail($id);
 
-        
+         if (!$user->canAccessAudit($audit)) {
+            return $this->forbidden();
+        }
 
         foreach ($audit->cameraForms as $cf) {
             foreach ($cf->notes as $note) {
