@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\CustomReport;
 use App\Models\Entity;
 use App\Models\Store;
 use App\Services\ScoringService;
@@ -573,12 +574,14 @@ class CameraReportController extends Controller
 
     private function getReportData(Request $request, $user): array
     {
+
         $storeId = $request->input('store_id');
         $group = $request->input('group');
         $reportType = $request->input('report_type');
         $dateFrom = $request->input('date_from');
         $dateTo = $request->input('date_to');
         $ratingId = $request->input('rating_id');
+        $customReportId = $request->input('custom_report_id');
 
         $ratingId = ($ratingId !== null && $ratingId !== '') ? (int) $ratingId : null;
 
@@ -614,6 +617,21 @@ class CameraReportController extends Controller
         if ($dateTo) {
             $cameraFormsBase->where('audits.date', '<=', $dateTo);
         }
+        // update here
+        // ========================
+        if ($customReportId) {
+            $selectedEntityIds = DB::table('custom_report_entities')
+                ->where('custom_report_id', $customReportId)
+                ->pluck('entity_id')
+                ->toArray();
+
+            if (empty($selectedEntityIds)) {
+                $cameraFormsBase->whereRaw('1 = 0');
+            } else {
+                $cameraFormsBase->whereIn('entities.id', $selectedEntityIds);
+            }
+            // ========================
+        }
 
         /**
          * Rating filter behavior:
@@ -638,6 +656,17 @@ class CameraReportController extends Controller
          * 2) Entities list (for frontend)
          */
         $entitiesQuery = Entity::with('category');
+
+        // update here
+        // ======================
+        if ($customReportId) {
+            $customReport = CustomReport::findOrFail($customReportId);
+            $entitiesQuery->whereHas('customReports', function ($q) use ($customReportId) {
+                $q->where('custom_report_id', $customReportId);
+            });
+        }
+        // ======================
+
         if ($reportType) {
             $entitiesQuery->where('report_type', $reportType);
         }
@@ -818,6 +847,7 @@ class CameraReportController extends Controller
             'total_stores' => count($summary),
             'scoreData' => $scoreData,
         ];
+
     }
 
     private function getReportAttachments(Request $request, $user)
@@ -829,6 +859,8 @@ class CameraReportController extends Controller
         $dateTo = $request->input('date_to');
         $ratingId = $request->input('rating_id');
         $ratingId = ($ratingId !== null && $ratingId !== '') ? (int) $ratingId : null;
+        // update here
+        $customReportId = $request->input('custom_report_id');
 
         $userGroups = $user->isAdmin() ? null : $user->getGroupNumbers();
 
@@ -867,6 +899,20 @@ class CameraReportController extends Controller
                 ->all();
 
             $q->whereIn('stores.id', $eligibleStoreIds ?: [-1]);
+        }
+
+        // update here
+        if ($customReportId) {
+            $selectedEntityIds = DB::table('custom_report_entities')
+                ->where('custom_report_id', $customReportId)
+                ->pluck('entity_id')
+                ->toArray();
+
+            if (! empty($selectedEntityIds)) {
+                $q->whereIn('entities.id', $selectedEntityIds);
+            } else {
+                $q->whereRaw('1 = 0');
+            }
         }
 
         return $q->get();

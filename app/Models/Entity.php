@@ -42,4 +42,14 @@ class Entity extends Model
     {
         return $this->hasMany(CameraForm::class);
     }
+
+    public function customReports()
+    {
+        return $this->belongsToMany(
+            CustomReport::class,
+            'custom_report_entities',
+            'entity_id',
+            'custom_report_id'
+        );
+    }
 }

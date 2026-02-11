@@ -26,6 +26,17 @@ class DatabaseSeeder extends Seeder
             ]
 
         );
+        User::firstOrCreate(
+            ['email' => 'test@example.com'],
+            [
+                'name' => 'ebaa',
+                'email' => 'ebaa@example.com',
+                'role' => 'User',
+                'password' => '12345678',
+                'email_verified_at' => now(),
+            ]
+
+        );
 
         $this->call([
             CameraFormTablesSeeder::class,

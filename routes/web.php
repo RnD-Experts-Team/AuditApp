@@ -3,6 +3,7 @@
 use App\Http\Controllers\CameraFormController;
 use App\Http\Controllers\CameraReportController;
 use App\Http\Controllers\CategoryController;
+use App\Http\Controllers\CustomReportController;
 use App\Http\Controllers\EntityController;
 use App\Http\Controllers\StoreController;
 use App\Http\Controllers\UserController;
@@ -25,7 +26,20 @@ Route::middleware(['auth'])->group(function () {
     Route::get('camera-reports/exportExcel', [CameraReportController::class, 'exportExcel'])->name('camera-reports.exportExcel');
     Route::get('camera-reports/exportImages', [CameraReportController::class, 'exportImages'])->name('camera-reports.exportImages');
 
+    // custom report
+
+    /*
+    |--------------------------------------------------------------------------
+    | Custom Reports
+    |--------------------------------------------------------------------------
+    */
+    Route::resource('custom-reports', CustomReportController::class)
+        ->only(['index', 'show']);
+
     Route::middleware('admin.only')->group(function () {
+        Route::resource('custom-reports', CustomReportController::class)
+            ->except(['index', 'show']);
+        Route::resource('custom-reports', CustomReportController::class);
         Route::resource('stores', StoreController::class)->except(['show', 'create', 'edit']);
         Route::resource('entities', EntityController::class)->except(['show', 'create', 'edit']);
         Route::resource('categories', CategoryController::class)->only(['store', 'update', 'destroy']);
