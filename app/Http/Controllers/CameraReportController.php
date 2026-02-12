@@ -782,7 +782,7 @@ class CameraReportController extends Controller
              * 6) Scoring logic (unchanged)
              */
             $perDateScoresWithoutAuto = [];
-            $hasAnyWeeklyAutoFail = false;
+            $hasWeeklyZeroScore = false;
 
             if (isset($formsByStoreByDate[$sid])) {
                 foreach ($formsByStoreByDate[$sid] as $dateStr => $formsForDate) {
@@ -802,12 +802,12 @@ class CameraReportController extends Controller
                     $scoreWithoutAuto = ($denom > 0) ? $pass / $denom : null;
                     $perDateScoresWithoutAuto[] = $scoreWithoutAuto;
 
+                    // update here
                     foreach ($formsForDate as $form) {
-                        if (
-                            strtolower($form->rating_label ?? '') === 'auto fail'
-                            && $form->date_range_type === 'weekly'
-                        ) {
-                            $hasAnyWeeklyAutoFail = true;
+                        $label = strtolower($form->rating_label ?? '');
+
+                        if (in_array($label, ['auto fail', 'urgent'], true) && $form->date_range_type === 'weekly') {
+                            $hasWeeklyZeroScore = true;
                             break;
                         }
                     }
@@ -823,7 +823,7 @@ class CameraReportController extends Controller
             if (isset($formsByStoreByDate[$sid])) {
                 $weeklyScore = $this->scoringService->calculateWeeklyScore(
                     $formsByStoreByDate[$sid],
-                    $hasAnyWeeklyAutoFail
+                    $hasWeeklyZeroScore
                 );
                 $finalScoreWithAuto = $weeklyScore !== null ? round($weeklyScore, 2) : null;
             }
