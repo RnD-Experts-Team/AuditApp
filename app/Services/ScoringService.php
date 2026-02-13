@@ -4,56 +4,45 @@ namespace App\Services;
 
 class ScoringService
 {
-    /**
-     * Check if any form has Auto Fail rating
-     *
-     * @param array $forms Array of form objects with rating_label
-     * @return bool
-     */
-    public function hasAutoFail(array $forms): bool
+    // Treat these rating labels as "zero-score triggers"
+    private array $zeroScoreLabels = ['auto fail', 'urgent'];
+
+    private function isZeroScoreLabel(?string $label): bool
     {
-        foreach ($forms as $form) {
-            $label = strtolower($form->rating_label ?? '');
-            if ($label === 'auto fail') {
-                return true;
-            }
-        }
-        return false;
+        $label = strtolower(trim($label ?? ''));
+
+        return in_array($label, $this->zeroScoreLabels, true);
     }
 
     /**
-     * Count days with at least one Auto Fail rating
-     * Each day with one or more Auto Fails counts as one occurrence
-     *
-     * @param array $formsByDate Array indexed by date, each containing array of forms
-     * @return int
+     * Count total occurrences of urgent/auto fail across the whole week (all dates).
      */
-    public function countAutoFailDays(array $formsByDate): int
+    public function countZeroScoreOccurrences(array $formsByDate): int
     {
-        $autoFailDays = 0;
-        
+        $count = 0;
+
         foreach ($formsByDate as $date => $forms) {
-            if ($this->hasAutoFail($forms)) {
-                $autoFailDays++;
+            foreach ($forms as $form) {
+                if ($this->isZeroScoreLabel($form->rating_label ?? null)) {
+                    $count++;
+                }
             }
         }
-        
-        return $autoFailDays;
+
+        return $count;
     }
 
     /**
      * Calculate daily score for a specific date
-     * Returns 0 if any Auto Fail exists, otherwise pass/(pass+fail)
-     * Returns null if no pass/fail data
-     *
-     * @param array $forms Array of form objects for a single day
-     * @return float|null
+     * Returns 0 if ANY urgent/auto fail exists that day
+     * Otherwise pass/(pass+fail)
      */
     public function calculateDailyScore(array $forms): ?float
     {
-        // Check for Auto Fail first
-        if ($this->hasAutoFail($forms)) {
-            return 0.0;
+        foreach ($forms as $form) {
+            if ($this->isZeroScoreLabel($form->rating_label ?? null)) {
+                return 0.0;
+            }
         }
 
         $pass = 0;
@@ -69,8 +58,6 @@ class ScoringService
         }
 
         $total = $pass + $fail;
-        
-        // If no pass/fail data, return null
         if ($total === 0) {
             return null;
         }
@@ -79,33 +66,31 @@ class ScoringService
     }
 
     /**
-     * Calculate weekly score considering Auto Fail rules
-     * Returns 0 if weekly Auto Fail or 3+ daily Auto Fail days
-     * Otherwise returns average of daily scores
-     *
-     * @param array $formsByDate Array indexed by date, each containing array of forms
-     * @param bool $hasWeeklyAutoFail Whether any weekly audit has Auto Fail
-     * @return float|null
+     * Weekly score:
+     * - If any WEEKLY audit has urgent/auto fail => 0
+     * - Else if total urgent/auto fail occurrences >= 3 => 0
+     * - Else average of daily scores
      */
-    public function calculateWeeklyScore(array $formsByDate, bool $hasWeeklyAutoFail): ?float
+    public function calculateWeeklyScore(array $formsByDate, bool $hasWeeklyZeroScore): ?float
     {
-        // Rule 1: If any weekly audit has Auto Fail, score is 0
-        if ($hasWeeklyAutoFail) {
+
+        if ($hasWeeklyZeroScore) {
+            return 0.0;
+        }
+        // Weekly rule:
+        // If total urgent + auto fail across the week >= 3 → 0
+        if ($this->countZeroScoreOccurrences($formsByDate) >= 3) {
             return 0.0;
         }
 
-        // Rule 2: Count daily Auto Fail days
-        $autoFailDays = $this->countAutoFailDays($formsByDate);
-        if ($autoFailDays >= 3) {
-            return 0.0;
-        }
-
-        // Calculate average of daily scores
+        // Otherwise average daily scores
         $dailyScores = [];
+
         foreach ($formsByDate as $date => $forms) {
-            $dailyScore = $this->calculateDailyScore($forms);
-            if ($dailyScore !== null) {
-                $dailyScores[] = $dailyScore;
+            $daily = $this->calculateDailyScore($forms);
+
+            if ($daily !== null) {
+                $dailyScores[] = $daily;
             }
         }
 
