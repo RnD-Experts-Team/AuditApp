@@ -25,8 +25,16 @@ class StoreCustomReportRequest extends FormRequest
     public function messages(): array
     {
         return [
+            'name.required' => 'The report name is required.',
+            'name.string' => 'The report name must be a valid string.',
+            'name.max' => 'The report name must not exceed 255 characters.',
+            'name.unique' => 'The report name must be unique. A report with this name already exists.',
+
             'entity_ids.required' => 'You must select at least one entity.',
+            'entity_ids.array' => 'The entities field must be an array.',
             'entity_ids.min' => 'You must select at least one entity.',
+
+            'entity_ids.*.exists' => 'Each selected entity must be a valid entity.',
         ];
     }
     /*

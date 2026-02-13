@@ -39,7 +39,6 @@ Route::middleware(['auth'])->group(function () {
     Route::middleware('admin.only')->group(function () {
         Route::resource('custom-reports', CustomReportController::class)
             ->except(['index', 'show']);
-        Route::resource('custom-reports', CustomReportController::class);
         Route::resource('stores', StoreController::class)->except(['show', 'create', 'edit']);
         Route::resource('entities', EntityController::class)->except(['show', 'create', 'edit']);
         Route::resource('categories', CategoryController::class)->only(['store', 'update', 'destroy']);
