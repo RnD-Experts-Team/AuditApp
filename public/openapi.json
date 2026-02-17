@@ -571,7 +571,7 @@
           "500": { "$ref": "#/components/responses/InternalServerErrorJson" }
         }
       },
-      "put": {
+      "post": {
         "tags": ["Camera Forms"],
         "summary": "Update an audit + associated camera forms/notes/attachments (logic preserved in your codebase)",
         "description": "Accepts multipart/form-data (images). Your controller indicates the update logic is preserved from the web version; the detailed behavior depends on your trimmed block.\n\nThe request validation supports:\n- entities.*.rating_id\n- entities.*.notes.*.id (existing note id)\n- entities.*.notes.*.remove_attachment_ids (remove attachments)\n- entities.*.remove_note_ids (remove notes)\n- entities.*.notes.*.images.* (new images)\n\nEven if you don't change anything, validation requires at least one entity to have a rating, note, image, or removal.",
