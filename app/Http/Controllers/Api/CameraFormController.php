@@ -37,7 +37,7 @@ class CameraFormController extends Controller
 
         $query = Audit::with([
             'store',
-            'user',
+            // 'user',
             'cameraForms.entity.category',
             'cameraForms.rating',
             'cameraForms.notes.attachments',
@@ -170,7 +170,7 @@ class CameraFormController extends Controller
         }
         $audit = Audit::with([
             'store',
-            'user',
+            // 'user',
             'cameraForms.entity.category',
             'cameraForms.rating',
             'cameraForms.notes.attachments',
