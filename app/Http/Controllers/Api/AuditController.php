@@ -226,7 +226,7 @@ class AuditController extends Controller
         }
 
         // Find the store by store_id
-        $store = Store::find('store', $store_id);
+        $store = Store::where('store', $store_id)->first();
         if (!$store) {
             return response()->json([
                 'status'  => 'error',
