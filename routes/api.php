@@ -26,7 +26,7 @@ Route::middleware([
 
     Route::apiResource('audits', AuditController::class)
         ->only(['index', 'show']);
-    Route::get('audits/summary/{store_code}/{date}', [AuditController::class, 'summary']);
+    // Route::get('audits/summary/{store_code}/{date}', [AuditController::class, 'summary']);
 
 
     Route::apiResource('entities', EntityController::class)
