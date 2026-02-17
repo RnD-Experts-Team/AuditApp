@@ -13,7 +13,11 @@ Route::middleware([
 ])->group(function () {
     
 
-    Route::apiResource('camera-forms', CameraFormController::class);
+    Route::apiResource('camera-forms', CameraFormController::class)
+    ->except(['update']);  // Exclude the default `update` route
+
+// Define custom `update` route with POST method
+Route::post('camera-forms/{camera_form}', [CameraFormController::class, 'update']);
 
     Route::get('camera-reports', [CameraReportController::class, 'index']);
     Route::get('camera-reports/export', [CameraReportController::class, 'export']);
