@@ -208,7 +208,7 @@ class AuditController extends Controller
     // }
 
 
-    public function ratingsSummary(int $store_id, string $date_start, string $date_end)
+    public function ratingsSummary(string $store_id, string $date_start, string $date_end)
     {
         $user = Auth::user();
         if (!$user) {
@@ -226,7 +226,7 @@ class AuditController extends Controller
         }
 
         // Find the store by store_id
-        $store = Store::find($store_id);
+        $store = Store::find('store', $store_id);
         if (!$store) {
             return response()->json([
                 'status'  => 'error',
