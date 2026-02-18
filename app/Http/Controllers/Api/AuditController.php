@@ -208,15 +208,19 @@ class AuditController extends Controller
     // }
 
 
-    public function ratingsSummary(string $store_id, string $date_start, string $date_end)
+    public function ratingsSummary(string $store_code, string $date_start, string $date_end)
     {
         $user = Auth::user();
+
         if (!$user) {
             return $this->unauthorized();
         }
 
         // Validate date format
-        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date_start) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $date_end)) {
+        if (
+            !preg_match('/^\d{4}-\d{2}-\d{2}$/', $date_start) ||
+            !preg_match('/^\d{4}-\d{2}-\d{2}$/', $date_end)
+        ) {
             return response()->json([
                 'status'  => 'error',
                 'message' => 'Invalid date format. Use yyyy-mm-dd',
@@ -225,68 +229,53 @@ class AuditController extends Controller
             ], 422);
         }
 
-        // Find the store by store_id
-        $store = Store::where('store', $store_id)->first();
+        // 🔹 Find store by store code (stores.store column)
+        $store = Store::where('store', $store_code)->first();
+
         if (!$store) {
             return response()->json([
                 'status'  => 'error',
                 'message' => 'Store not found',
                 'data'    => null,
-                'errors'  => ['store' => ['Store ID not found']],
+                'errors'  => ['store' => ['Store code not found']],
             ], 404);
         }
 
-        // Get camera forms for the store in the specified date range
-        $cameraForms = CameraForm::with('entity')
-            ->whereHas('audit', function ($query) use ($store_id, $date_start, $date_end) {
-                $query->where('store_id', $store_id)
-                    ->whereBetween('date', [$date_start, $date_end]);
-            })
-            ->whereIn('rating_id', [5, 6]) // 5 = Auto-fail, 6 = Urgent
+        // 🔹 Authorization check (uses numeric ID)
+        if (!$user->canAccessStoreId((int)$store->id)) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Forbidden',
+                'data'    => null,
+                'errors'  => ['store' => ['You do not have access to this store']],
+            ], 403);
+        }
+
+        // 🔹 Optimized aggregated query
+        $entities = CameraForm::query()
+            ->selectRaw("
+            entities.id as entity_id,
+            entities.entity_label,
+            SUM(CASE WHEN camera_forms.rating_id = 5 THEN 1 ELSE 0 END) as auto_fail_count,
+            SUM(CASE WHEN camera_forms.rating_id = 6 THEN 1 ELSE 0 END) as urgent_count,
+            COUNT(camera_forms.id) as total_count
+        ")
+            ->join('audits', 'camera_forms.audit_id', '=', 'audits.id')
+            ->join('entities', 'camera_forms.entity_id', '=', 'entities.id')
+            ->where('audits.store_id', $store->id) // ✅ numeric ID match
+            ->whereBetween('audits.date', [$date_start, $date_end])
+            ->whereIn('camera_forms.rating_id', [5, 6])
+            ->where('entities.active', true) // ✅ only active entities
+            ->groupBy('entities.id', 'entities.entity_label')
+            ->orderByDesc('total_count')
+            ->limit(5)
             ->get();
 
-        // Count the occurrences of rating 5 (auto-fail) and 6 (urgent) per entity
-        $entityCounts = [];
-
-        foreach ($cameraForms as $form) {
-            if (!isset($entityCounts[$form->entity_id])) {
-                $entityCounts[$form->entity_id] = [
-                    'entity' => $form->entity,
-                    'auto_fail_count' => 0,
-                    'urgent_count' => 0,
-                ];
-            }
-
-            if ($form->rating_id == 5) {
-                $entityCounts[$form->entity_id]['auto_fail_count']++;
-            } elseif ($form->rating_id == 6) {
-                $entityCounts[$form->entity_id]['urgent_count']++;
-            }
-        }
-
-        // Sort entities by the total of auto-fail and urgent counts, descending
-        uasort($entityCounts, function ($a, $b) {
-            return ($b['auto_fail_count'] + $b['urgent_count']) - ($a['auto_fail_count'] + $a['urgent_count']);
-        });
-
-        // Get the top 5 entities
-        $topEntities = array_slice($entityCounts, 0, 5);
-
-        // Prepare the response
-        $response = [];
-        foreach ($topEntities as $data) {
-            $response[] = [
-                'entity_id' => $data['entity']->id,
-                'entity_label' => $data['entity']->entity_label,
-                'auto_fail_count' => $data['auto_fail_count'],
-                'urgent_count' => $data['urgent_count'],
-                'total_count' => $data['auto_fail_count'] + $data['urgent_count'],
-            ];
-        }
-
-        return $this->success('Top 5 entities retrieved successfully', $response);
+        return $this->success(
+            'Top 5 entities retrieved successfully',
+            $entities
+        );
     }
-
 
     /* ------------------------------------------------------------
      | Shared API helpers (same convention as other controllers)
