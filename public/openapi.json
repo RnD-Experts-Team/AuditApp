@@ -1100,6 +1100,433 @@
         }
       }
     },
+    "/api/camera-reports/exportExcel": {
+    "get": {
+      "tags": ["Camera Reports"],
+      "summary": "Export camera report as Excel file",
+      "description": "Export the camera report data as an Excel file containing the relevant details.",
+      "parameters": [
+        {
+          "name": "store_id",
+          "in": "query",
+          "required": false,
+          "schema": { "type": "integer", "example": 12 }
+        },
+        {
+          "name": "group",
+          "in": "query",
+          "required": false,
+          "schema": { "type": "integer", "example": 3 }
+        },
+        {
+          "name": "report_type",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "string",
+            "enum": ["main", "secondary"],
+            "example": "main"
+          }
+        },
+        {
+          "name": "date_from",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "string",
+            "format": "date",
+            "example": "2026-01-01"
+          }
+        },
+        {
+          "name": "date_to",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "string",
+            "format": "date",
+            "example": "2026-01-31"
+          }
+        },
+        {
+          "name": "rating_id",
+          "in": "query",
+          "required": false,
+          "schema": { "type": "integer", "example": 2 }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "Excel file download",
+          "content": {
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+              "schema": { "type": "string", "format": "binary" },
+              "examples": {
+                "excel": {
+                  "summary": "A ZIP containing camera-report_YYYY-MM-DD.xlsx",
+                  "value": "(binary)"
+                }
+              }
+            }
+          },
+          "headers": {
+            "Content-Disposition": {
+              "description": "attachment; filename=\"camera-report_YYYY-MM-DD.xlsx\"",
+              "schema": { "type": "string" }
+            }
+          }
+        },
+        "401": {
+          "description": "Unauthorized (export uses abort(401))",
+          "content": {
+            "text/plain": {
+              "schema": { "type": "string" },
+              "examples": {
+                "unauthorized": { "value": "Unauthorized." }
+              }
+            }
+          }
+        },
+        "500": {
+          "description": "Failed to create Excel file or internal error",
+          "content": {
+            "text/plain": {
+              "schema": { "type": "string" },
+              "examples": {
+                "failed_excel": { "value": "Failed to create Excel file" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/camera-reports/exportImages": {
+    "get": {
+      "tags": ["Camera Reports"],
+      "summary": "Export camera report images",
+      "description": "Export camera report images as a ZIP file containing all associated image attachments.",
+      "parameters": [
+        {
+          "name": "store_id",
+          "in": "query",
+          "required": false,
+          "schema": { "type": "integer", "example": 12 }
+        },
+        {
+          "name": "group",
+          "in": "query",
+          "required": false,
+          "schema": { "type": "integer", "example": 3 }
+        },
+        {
+          "name": "report_type",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "string",
+            "enum": ["main", "secondary"],
+            "example": "main"
+          }
+        },
+        {
+          "name": "date_from",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "string",
+            "format": "date",
+            "example": "2026-01-01"
+          }
+        },
+        {
+          "name": "date_to",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "string",
+            "format": "date",
+            "example": "2026-01-31"
+          }
+        },
+        {
+          "name": "rating_id",
+          "in": "query",
+          "required": false,
+          "schema": { "type": "integer", "example": 2 }
+        }
+      ],
+      "responses": {
+        "200": {
+          "description": "ZIP file download",
+          "content": {
+            "application/zip": {
+              "schema": { "type": "string", "format": "binary" },
+              "examples": {
+                "zip": {
+                  "summary": "A ZIP containing camera-report_YYYY-MM-DD.zip with image attachments",
+                  "value": "(binary)"
+                }
+              }
+            }
+          },
+          "headers": {
+            "Content-Disposition": {
+              "description": "attachment; filename=\"camera-report_YYYY-MM-DD-images.zip\"",
+              "schema": { "type": "string" }
+            }
+          }
+        },
+        "401": {
+          "description": "Unauthorized (export uses abort(401))",
+          "content": {
+            "text/plain": {
+              "schema": { "type": "string" },
+              "examples": {
+                "unauthorized": { "value": "Unauthorized." }
+              }
+            }
+          }
+        },
+        "500": {
+          "description": "Failed to create ZIP file or internal error",
+          "content": {
+            "text/plain": {
+              "schema": { "type": "string" },
+              "examples": {
+                "failed_zip": { "value": "Failed to create ZIP file" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+    "/api/custom-reports": {
+    "get": {
+      "tags": ["custom Reports"],
+      "summary": "List all custom reports",
+      "description": "Returns a paginated list of custom reports, including their entities.",
+      "responses": {
+        "200": {
+          "description": "Custom reports fetched successfully",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApiSuccessResponse"
+              },
+              "examples": {
+                "success": {
+                  "value": {
+                    "status": "success",
+                    "message": "Custom reports fetched successfully",
+                    "data": [
+                      {
+                        "id": 1,
+                        "name": "Front Door Security Check",
+                        "created_at": "2026-01-20T14:22:11.000000Z",
+                        "updated_at": "2026-01-20T14:22:11.000000Z",
+                        "entities": [
+                          {
+                            "entity_id": 33,
+                            "entity_label": "Front Door Camera Angle"
+                          }
+                        ]
+                      },
+                      {
+                        "id": 2,
+                        "name": "Back Door Security Check",
+                        "created_at": "2026-01-21T14:22:11.000000Z",
+                        "updated_at": "2026-01-21T14:22:11.000000Z",
+                        "entities": [
+                          {
+                            "entity_id": 34,
+                            "entity_label": "Back Door Camera Angle"
+                          }
+                        ]
+                      }
+                    ],
+                    "errors": null
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "post": {
+      "tags": ["custom Reports"],
+      "summary": "Create a new custom report",
+      "description": "Creates a new custom report with specified entities.",
+      "requestBody": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/CustomReportCreateRequest"
+            }
+          }
+        }
+      },
+      "responses": {
+        "201": {
+          "description": "Custom report created successfully",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApiSuccessResponse"
+              },
+              "examples": {
+                "created": {
+                  "value": {
+                    "status": "success",
+                    "message": "Custom report created successfully",
+                    "data": {
+                      "id": 3,
+                      "name": "Side Door Security Check",
+                      "created_at": "2026-01-25T14:22:11.000000Z",
+                      "updated_at": "2026-01-25T14:22:11.000000Z",
+                      "entities": [
+                        {
+                          "entity_id": 35,
+                          "entity_label": "Side Door Camera Angle"
+                        }
+                      ]
+                    },
+                    "errors": null
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/api/custom-reports/{id}": {
+    "get": {
+      "tags": ["custom Reports"],
+      "summary": "Show a single custom report",
+      "description": "Fetch a specific custom report by its ID along with its associated entities.",
+      "parameters": [
+        { "$ref": "#/components/parameters/IdPathParam" }
+      ],
+      "responses": {
+        "200": {
+          "description": "Custom report fetched successfully",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApiSuccessResponse"
+              },
+              "examples": {
+                "success": {
+                  "value": {
+                    "status": "success",
+                    "message": "Custom report fetched successfully",
+                    "data": {
+                      "id": 1,
+                      "name": "Front Door Security Check",
+                      "created_at": "2026-01-20T14:22:11.000000Z",
+                      "updated_at": "2026-01-20T14:22:11.000000Z",
+                      "entities": [
+                        {
+                          "entity_id": 33,
+                          "entity_label": "Front Door Camera Angle"
+                        }
+                      ]
+                    },
+                    "errors": null
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "put": {
+      "tags": ["custom Reports"],
+      "summary": "Update an existing custom report",
+      "description": "Updates an existing custom report's name and associated entities.",
+      "parameters": [
+        { "$ref": "#/components/parameters/IdPathParam" }
+      ],
+      "requestBody": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/CustomReportUpdateRequest"
+            }
+          }
+        }
+      },
+      "responses": {
+        "200": {
+          "description": "Custom report updated successfully",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApiSuccessResponse"
+              },
+              "examples": {
+                "updated": {
+                  "value": {
+                    "status": "success",
+                    "message": "Custom report updated successfully",
+                    "data": {
+                      "id": 1,
+                      "name": "Updated Front Door Security Check",
+                      "created_at": "2026-01-20T14:22:11.000000Z",
+                      "updated_at": "2026-01-25T14:22:11.000000Z",
+                      "entities": [
+                        {
+                          "entity_id": 33,
+                          "entity_label": "Front Door Camera Angle"
+                        }
+                      ]
+                    },
+                    "errors": null
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "delete": {
+      "tags": ["custom Reports"],
+      "summary": "Delete a custom report",
+      "description": "Deletes a specific custom report along with its associated entities.",
+      "parameters": [
+        { "$ref": "#/components/parameters/IdPathParam" }
+      ],
+      "responses": {
+        "200": {
+          "description": "Custom report deleted successfully",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApiSuccessResponse"
+              },
+              "examples": {
+                "success": {
+                  "value": {
+                    "status": "success",
+                    "message": "Custom report deleted successfully",
+                    "data": null
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
     "/api/entities": {
       "get": {
         "tags": ["Entities"],
@@ -1512,6 +1939,7 @@
       }
     }
   },
+  
   "components": {
     "securitySchemes": {
       "bearerAuth": {
@@ -1640,6 +2068,28 @@
       }
     },
     "schemas": {
+      "CustomReportCreateRequest": {
+        "type": "object",
+        "required": ["name", "entity_ids"],
+        "properties": {
+          "name": { "type": "string", "example": "Sample Custom Report" },
+          "entity_ids": {
+            "type": "array",
+            "items": { "type": "integer", "example": 33 }
+          }
+        }
+      },
+      "CustomReportUpdateRequest": {
+        "type": "object",
+        "required": ["name", "entity_ids"],
+        "properties": {
+          "name": { "type": "string", "example": "Updated Custom Report" },
+          "entity_ids": {
+            "type": "array",
+            "items": { "type": "integer", "example": 33 }
+          }
+        }
+      },
       "ApiSuccessResponse": {
         "type": "object",
         "required": ["status", "message", "data", "errors"],
