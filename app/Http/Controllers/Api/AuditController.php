@@ -7,16 +7,17 @@ use App\Models\Audit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use App\Models\Store;
-use App\Services\ScoringService;
+// use App\Services\ScoringService;
+use App\Models\CameraForm;
 
 class AuditController extends Controller
 {
-        private ScoringService $scoringService;
+    // private ScoringService $scoringService;
 
-     public function __construct(ScoringService $scoringService)
-    {
-        $this->scoringService = $scoringService;
-    }
+    // public function __construct(ScoringService $scoringService)
+    // {
+    //     $this->scoringService = $scoringService;
+    // }
     /**
      * GET /api/audits
      * List audits accessible to the authenticated user
@@ -24,7 +25,7 @@ class AuditController extends Controller
     public function index(Request $request)
     {
         $user = Auth::user();
-       if (!$user) {
+        if (!$user) {
             return $this->unauthorized();
         }
 
@@ -57,158 +58,224 @@ class AuditController extends Controller
             'cameraForms.rating',
         ])->findOrFail($id);
 
-       if (!$user->canAccessAudit($audit)) {
+        if (!$user->canAccessAudit($audit)) {
             return $this->forbidden();
         }
 
         return $this->success('Audit fetched successfully', $audit);
     }
-/**
- * GET /api/audits/summary/{store_code}/{date}
- * Returns audit summary: total score + autofail items with images
- */
-public function summary(string $store_code, string $date)
-{
-     $user = Auth::user();
+    /**
+     * GET /api/audits/summary/{store_code}/{date}
+     * Returns audit summary: total score + autofail items with images
+     */
+    // public function summary(string $store_code, string $date)
+    // {
+    //     $user = Auth::user();
+    //     if (!$user) {
+    //         return $this->unauthorized();
+    //     }
+
+
+    //     // Validate date format
+    //     if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+    //         return response()->json([
+    //             'status'  => 'error',
+    //             'message' => 'Invalid date format. Use yyyy-mm-dd',
+    //             'data'    => null,
+    //             'errors'  => ['date' => ['Date must be in yyyy-mm-dd format']],
+    //         ], 422);
+    //     }
+
+    //     // Find store by 'store' field
+    //     $store = Store::where('store', $store_code)->first();
+
+    //     if (!$store) {
+    //         return response()->json([
+    //             'status'  => 'error',
+    //             'message' => 'Store not found',
+    //             'data'    => null,
+    //             'errors'  => ['store' => ['Store code not found']],
+    //         ], 404);
+    //     }
+
+    //     $store_id = $store->id;
+
+    //     if (!$user->canAccessAudit($audit)) {
+    //         return $this->forbidden();
+    //     }
+
+    //     // Find audit with attachments included
+    //     $audit = Audit::with([
+    //         'store',
+    //         'user',
+    //         'cameraForms.entity.category',
+    //         'cameraForms.rating',
+    //         'cameraForms.notes.attachments', // ✅ Include attachments
+    //     ])
+    //         ->where('store_id', $store_id)
+    //         ->where('date', $date)
+    //         ->first();
+
+    //     // Return empty structure if no audit exists
+    //     if (!$audit) {
+    //         return $this->success('No audit found for this date', [
+    //             'has_audit' => false,
+    //             'store_id' => $store_id,
+    //             'store_code' => $store_code,
+    //             'store_name' => $store->store,
+    //             'date' => $date,
+    //             'total_score' => null,
+    //             'autofails' => [],
+    //         ]);
+    //     }
+
+    //     // Calculate total score
+    //     $totalScore = $this->scoringService->calculateDailyScore(
+    //         $audit->cameraForms->all()
+    //     );
+    //     // Collect autofails with images
+    //     $autofails = $this->collectAutofails($audit);
+
+    //     return $this->success('Audit summary retrieved successfully', [
+    //         'has_audit' => true,
+    //         'store_id' => $store_id,
+    //         'store_code' => $store_code,
+    //         'store_name' => $store->store,
+    //         'store_group' => $store->group,
+    //         'date' => $date,
+    //         'audit_id' => $audit->id,
+    //         'audited_by' => $audit->user ? [
+    //             'id' => $audit->user->id,
+    //             'name' => $audit->user->name,
+    //         ] : null,
+    //         'total_score' => $totalScore,
+    //         'autofails' => $autofails,
+    //     ]);
+    // }
+
+    /**
+     * Collect all autofail items with entity information AND images
+     */
+    // private function collectAutofails(Audit $audit): array
+    // {
+    //     $autofails = [];
+
+    //     foreach ($audit->cameraForms as $form) {
+    //         $ratingLabel = strtolower($form->rating ? $form->rating->label : '');
+
+    //         if ($ratingLabel === 'auto fail') {
+    //             // Collect notes text
+    //             $notes = [];
+    //             $images = [];
+
+    //             foreach ($form->notes as $note) {
+    //                 // Add note text if exists
+    //                 if ($note->note !== null && trim($note->note) !== '') {
+    //                     $notes[] = trim($note->note);
+    //                 }
+
+    //                 // Add all images from this note
+    //                 foreach ($note->attachments as $attachment) {
+    //                     $images[] = [
+    //                         'id' => $attachment->id,
+    //                         'path' => $attachment->path,
+    //                         'url' => $attachment->url, // ✅ Public URL from model
+    //                     ];
+    //                 }
+    //             }
+
+    //             $autofails[] = [
+    //                 'camera_form_id' => $form->id,
+    //                 'entity' => [
+    //                     'id' => $form->entity->id,
+    //                     'label' => $form->entity->entity_label,
+    //                     'date_range_type' => $form->entity->date_range_type,
+    //                     'category' => $form->entity->category ? [
+    //                         'id' => $form->entity->category->id,
+    //                         'label' => $form->entity->category->label,
+    //                     ] : null,
+    //                 ],
+    //                 'rating_id' => $form->rating_id,
+    //                 'notes' => $notes,
+    //                 'notes_count' => count($notes),
+    //                 'images' => $images, // ✅ Image URLs included
+    //                 'images_count' => count($images),
+    //             ];
+    //         }
+    //     }
+
+    //     return $autofails;
+    // }
+
+
+    public function ratingsSummary(string $store_code, string $date_start, string $date_end)
+    {
+        $user = Auth::user();
+
         if (!$user) {
             return $this->unauthorized();
         }
 
-
-    // Validate date format
-    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
-        return response()->json([
-            'status'  => 'error',
-            'message' => 'Invalid date format. Use yyyy-mm-dd',
-            'data'    => null,
-            'errors'  => ['date' => ['Date must be in yyyy-mm-dd format']],
-        ], 422);
-    }
-
-    // Find store by 'store' field
-    $store = Store::where('store', $store_code)->first();
-    
-    if (!$store) {
-        return response()->json([
-            'status'  => 'error',
-            'message' => 'Store not found',
-            'data'    => null,
-            'errors'  => ['store' => ['Store code not found']],
-        ], 404);
-    }
-
-    $store_id = $store->id;
-
-    if (!$user->canAccessAudit($audit)) {
-            return $this->forbidden();
+        // Validate date format
+        if (
+            !preg_match('/^\d{4}-\d{2}-\d{2}$/', $date_start) ||
+            !preg_match('/^\d{4}-\d{2}-\d{2}$/', $date_end)
+        ) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Invalid date format. Use yyyy-mm-dd',
+                'data'    => null,
+                'errors'  => ['date' => ['Date must be in yyyy-mm-dd format']],
+            ], 422);
         }
 
-    // Find audit with attachments included
-    $audit = Audit::with([
-        'store',
-        'user',
-        'cameraForms.entity.category',
-        'cameraForms.rating',
-        'cameraForms.notes.attachments', // ✅ Include attachments
-    ])
-    ->where('store_id', $store_id)
-    ->where('date', $date)
-    ->first();
+        // 🔹 Find store by store code (stores.store column)
+        $store = Store::where('store', $store_code)->first();
 
-    // Return empty structure if no audit exists
-    if (!$audit) {
-        return $this->success('No audit found for this date', [
-            'has_audit' => false,
-            'store_id' => $store_id,
-            'store_code' => $store_code,
-            'store_name' => $store->store,
-            'date' => $date,
-            'total_score' => null,
-            'autofails' => [],
-        ]);
-    }
+        if (!$store) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Store not found',
+                'data'    => null,
+                'errors'  => ['store' => ['Store code not found']],
+            ], 404);
+        }
 
-    // Calculate total score
- $totalScore = $this->scoringService->calculateDailyScore(
-            $audit->cameraForms->all()
+        // 🔹 Authorization check (uses numeric ID)
+        if (!$user->canAccessStoreId((int)$store->id)) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Forbidden',
+                'data'    => null,
+                'errors'  => ['store' => ['You do not have access to this store']],
+            ], 403);
+        }
+
+        // 🔹 Optimized aggregated query
+        $entities = CameraForm::query()
+            ->selectRaw("
+            entities.id as entity_id,
+            entities.entity_label,
+            SUM(CASE WHEN camera_forms.rating_id = 5 THEN 1 ELSE 0 END) as auto_fail_count,
+            SUM(CASE WHEN camera_forms.rating_id = 6 THEN 1 ELSE 0 END) as urgent_count,
+            COUNT(camera_forms.id) as total_count
+        ")
+            ->join('audits', 'camera_forms.audit_id', '=', 'audits.id')
+            ->join('entities', 'camera_forms.entity_id', '=', 'entities.id')
+            ->where('audits.store_id', $store->id) // ✅ numeric ID match
+            ->whereBetween('audits.date', [$date_start, $date_end])
+            ->whereIn('camera_forms.rating_id', [5, 6])
+            ->where('entities.active', true) // ✅ only active entities
+            ->groupBy('entities.id', 'entities.entity_label')
+            ->orderByDesc('total_count')
+            ->limit(5)
+            ->get();
+
+        return $this->success(
+            'Top 5 entities retrieved successfully',
+            $entities
         );
-    // Collect autofails with images
-    $autofails = $this->collectAutofails($audit);
-
-    return $this->success('Audit summary retrieved successfully', [
-        'has_audit' => true,
-        'store_id' => $store_id,
-        'store_code' => $store_code,
-        'store_name' => $store->store,
-        'store_group' => $store->group,
-        'date' => $date,
-        'audit_id' => $audit->id,
-        'audited_by' => $audit->user ? [
-            'id' => $audit->user->id,
-            'name' => $audit->user->name,
-        ] : null,
-        'total_score' => $totalScore,
-        'autofails' => $autofails,
-    ]);
-}
-
-/**
- * Collect all autofail items with entity information AND images
- */
-private function collectAutofails(Audit $audit): array
-{
-    $autofails = [];
-
-    foreach ($audit->cameraForms as $form) {
-        $ratingLabel = strtolower($form->rating ? $form->rating->label : '');
-        
-        if ($ratingLabel === 'auto fail') {
-            // Collect notes text
-            $notes = [];
-            $images = [];
-            
-            foreach ($form->notes as $note) {
-                // Add note text if exists
-                if ($note->note !== null && trim($note->note) !== '') {
-                    $notes[] = trim($note->note);
-                }
-                
-                // Add all images from this note
-                foreach ($note->attachments as $attachment) {
-                    $images[] = [
-                        'id' => $attachment->id,
-                        'path' => $attachment->path,
-                        'url' => $attachment->url, // ✅ Public URL from model
-                    ];
-                }
-            }
-
-            $autofails[] = [
-                'camera_form_id' => $form->id,
-                'entity' => [
-                    'id' => $form->entity->id,
-                    'label' => $form->entity->entity_label,
-                    'date_range_type' => $form->entity->date_range_type,
-                    'category' => $form->entity->category ? [
-                        'id' => $form->entity->category->id,
-                        'label' => $form->entity->category->label,
-                    ] : null,
-                ],
-                'rating_id' => $form->rating_id,
-                'notes' => $notes,
-                'notes_count' => count($notes),
-                'images' => $images, // ✅ Image URLs included
-                'images_count' => count($images),
-            ];
-        }
     }
-
-    return $autofails;
-}
-
-
-
-
 
     /* ------------------------------------------------------------
      | Shared API helpers (same convention as other controllers)

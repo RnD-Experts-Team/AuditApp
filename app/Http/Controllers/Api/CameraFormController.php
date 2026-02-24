@@ -28,7 +28,7 @@ class CameraFormController extends Controller
     public function index(Request $request)
     {
         $user = Auth::user();
-         if (!$user) {
+        if (!$user) {
             return $this->unauthorized();
         }
 
@@ -37,7 +37,7 @@ class CameraFormController extends Controller
 
         $query = Audit::with([
             'store',
-            'user',
+            // 'user',
             'cameraForms.entity.category',
             'cameraForms.rating',
             'cameraForms.notes.attachments',
@@ -77,11 +77,11 @@ class CameraFormController extends Controller
         }
         $storeId = (int) $request->store_id;
 
-         if (!$user->canAccessStoreId($storeId)) {
+        if (!$user->canAccessStoreId($storeId)) {
             return $this->forbidden();
         }
 
-        
+
 
         $store = Store::findOrFail($storeId);
 
@@ -164,13 +164,13 @@ class CameraFormController extends Controller
     public function show(int $id)
     {
         $user = Auth::user();
-        
-         if (!$user) {
+
+        if (!$user) {
             return $this->unauthorized();
         }
         $audit = Audit::with([
             'store',
-            'user',
+            // 'user',
             'cameraForms.entity.category',
             'cameraForms.rating',
             'cameraForms.notes.attachments',
@@ -195,9 +195,16 @@ class CameraFormController extends Controller
 
         $audit = Audit::with('cameraForms.notes.attachments')->findOrFail($id);
 
-       if (!$user->canAccessAudit($audit)) {
+        if (!$user->canAccessAudit($audit)) {
             return $this->forbidden();
         }
+
+        $storeId = (int) $request->store_id;
+        if (!$user->canAccessStoreId($storeId)) {
+            abort(403, 'Unauthorized');
+        }
+
+        $store = Store::findOrFail($storeId);
 
         DB::beginTransaction();
 
@@ -207,8 +214,139 @@ class CameraFormController extends Controller
                 'date' => $request->date,
             ]);
 
-            // 🔁 Logic preserved exactly as your web version
-            // (trimmed here for brevity explanation, NOT functionality)
+            $submittedEntityIds = [];
+
+            foreach ($request->entities as $i => $entityData) {
+                $entityId = (int) $entityData['entity_id'];
+                $submittedEntityIds[] = $entityId;
+
+                $cameraForm = CameraForm::where('audit_id', $audit->id)
+                    ->where('entity_id', $entityId)
+                    ->with('notes.attachments')
+                    ->first();
+
+                if (!$cameraForm) {
+                    $cameraForm = new CameraForm();
+                    $cameraForm->audit_id = $audit->id;
+                    $cameraForm->entity_id = $entityId;
+                    $cameraForm->user_id = (int) Auth::id();
+                }
+
+                $cameraForm->rating_id = $entityData['rating_id'] ?? null;
+                $cameraForm->save();
+
+                $removeNoteIds = $entityData['remove_note_ids'] ?? [];
+                if (is_array($removeNoteIds) && count($removeNoteIds) > 0) {
+                    $notesToRemove = CameraFormNote::where('camera_form_id', $cameraForm->id)
+                        ->whereIn('id', $removeNoteIds)
+                        ->with('attachments')
+                        ->get();
+
+                    foreach ($notesToRemove as $note) {
+                        foreach ($note->attachments as $att) {
+                            if ($att->path) Storage::disk('public')->delete($att->path);
+                            $att->delete();
+                        }
+                        $note->delete();
+                    }
+                }
+
+                $notes = $entityData['notes'] ?? [];
+                $keptNoteIds = [];
+
+                if (is_array($notes)) {
+                    foreach ($notes as $j => $noteRow) {
+                        $noteId = isset($noteRow['id']) ? (int)$noteRow['id'] : null;
+                        $noteText = isset($noteRow['note']) ? (string)$noteRow['note'] : null;
+                        $noteTrim = is_string($noteText) ? trim($noteText) : '';
+
+                        $files = $request->file("entities.$i.notes.$j.images") ?? [];
+                        $hasImages = is_array($files) && count($files) > 0;
+
+                        $removeAttachmentIds = $noteRow['remove_attachment_ids'] ?? [];
+                        $wantsRemoveAtt = is_array($removeAttachmentIds) && count($removeAttachmentIds) > 0;
+
+                        if (!$noteId && $noteTrim === '' && !$hasImages && !$wantsRemoveAtt) {
+                            continue;
+                        }
+
+                        $note = null;
+
+                        if ($noteId) {
+                            $note = CameraFormNote::where('camera_form_id', $cameraForm->id)
+                                ->where('id', $noteId)
+                                ->with('attachments')
+                                ->first();
+                        }
+
+                        if (!$note) {
+                            $note = $cameraForm->notes()->create([
+                                'note' => $noteTrim === '' ? null : $noteText,
+                            ]);
+                        } else {
+                            $note->note = ($noteTrim === '') ? null : $noteText;
+                            $note->save();
+                        }
+
+                        $keptNoteIds[] = $note->id;
+
+                        if ($wantsRemoveAtt) {
+                            $attsToRemove = CameraFormNoteAttachment::where('camera_form_note_id', $note->id)
+                                ->whereIn('id', $removeAttachmentIds)
+                                ->get();
+
+                            foreach ($attsToRemove as $att) {
+                                if ($att->path) Storage::disk('public')->delete($att->path);
+                                $att->delete();
+                            }
+                        }
+
+                        if ($hasImages) {
+                            $entityModel = Entity::findOrFail($entityId);
+                            $seq = $this->nextEntityImageSeq($audit->id, $entityModel->id);
+
+                            foreach ($files as $file) {
+                                $path = $this->storeImageWithNaming($file, $store, $request->date, $entityModel, $seq);
+                                $note->attachments()->create(['path' => $path]);
+                                $seq++;
+                            }
+                        }
+
+                        $note->load('attachments');
+                        $hasAnything = (is_string($note->note) && trim($note->note) !== '') || ($note->attachments->count() > 0);
+                        if (!$hasAnything) {
+                            foreach ($note->attachments as $att) {
+                                if ($att->path) Storage::disk('public')->delete($att->path);
+                                $att->delete();
+                            }
+                            $note->delete();
+                            $keptNoteIds = array_values(array_filter($keptNoteIds, fn($x) => $x !== $note->id));
+                        }
+                    }
+                }
+
+                $cameraForm->load('notes.attachments');
+                $hasNotes = $cameraForm->notes->count() > 0;
+
+                if (($cameraForm->rating_id === null) && !$hasNotes) {
+                    $cameraForm->delete();
+                }
+            }
+
+            CameraForm::where('audit_id', $audit->id)
+                ->whereNotIn('entity_id', $submittedEntityIds)
+                ->with('notes.attachments')
+                ->get()
+                ->each(function (CameraForm $cf) {
+                    foreach ($cf->notes as $note) {
+                        foreach ($note->attachments as $att) {
+                            if ($att->path) Storage::disk('public')->delete($att->path);
+                            $att->delete();
+                        }
+                        $note->delete();
+                    }
+                    $cf->delete();
+                });
 
             DB::commit();
 
@@ -229,7 +367,7 @@ class CameraFormController extends Controller
     public function destroy(int $id)
     {
         $user = Auth::user();
-        
+
         if (!$user) {
             return $this->unauthorized();
         }
@@ -237,7 +375,7 @@ class CameraFormController extends Controller
 
         $audit = Audit::with('cameraForms.notes.attachments')->findOrFail($id);
 
-         if (!$user->canAccessAudit($audit)) {
+        if (!$user->canAccessAudit($audit)) {
             return $this->forbidden();
         }
 

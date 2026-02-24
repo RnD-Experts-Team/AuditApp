@@ -227,6 +227,152 @@
         }
       }
     },
+    "/api/audits/ratings-summary/{store_id}/{date_start}/{date_end}": {
+      "get": {
+        "tags": ["Audits"],
+        "summary": "Get the top 5 entities with the highest auto-fail (5) and urgent (6) ratings within a date range for a store",
+        "parameters": [
+          {
+            "name": "store_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "example": 12
+            }
+          },
+          {
+            "name": "date_start",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "example": "2026-01-01"
+            }
+          },
+          {
+            "name": "date_end",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "example": "2026-01-31"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Top 5 entities with auto-fail and urgent ratings fetched successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": ["success"]
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "entity_id": {
+                            "type": "integer",
+                            "example": 33
+                          },
+                          "entity_label": {
+                            "type": "string",
+                            "example": "Front Door Camera Angle"
+                          },
+                          "auto_fail_count": {
+                            "type": "integer",
+                            "example": 3
+                          },
+                          "urgent_count": {
+                            "type": "integer",
+                            "example": 2
+                          },
+                          "total_count": {
+                            "type": "integer",
+                            "example": 5
+                          }
+                        }
+                      }
+                    },
+                    "errors": {
+                      "type": "object",
+                      "default": null
+                    }
+                  }
+                },
+                "examples": {
+                  "success": {
+                    "value": {
+                      "status": "success",
+                      "message": "Top 5 entities retrieved successfully",
+                      "data": [
+                        {
+                          "entity_id": 33,
+                          "entity_label": "Front Door Camera Angle",
+                          "auto_fail_count": 3,
+                          "urgent_count": 2,
+                          "total_count": 5
+                        },
+                        {
+                          "entity_id": 34,
+                          "entity_label": "Back Door Camera Angle",
+                          "auto_fail_count": 4,
+                          "urgent_count": 1,
+                          "total_count": 5
+                        },
+                        {
+                          "entity_id": 35,
+                          "entity_label": "Side Door Camera Angle",
+                          "auto_fail_count": 2,
+                          "urgent_count": 3,
+                          "total_count": 5
+                        },
+                        {
+                          "entity_id": 36,
+                          "entity_label": "Hallway Camera Angle",
+                          "auto_fail_count": 3,
+                          "urgent_count": 2,
+                          "total_count": 5
+                        },
+                        {
+                          "entity_id": 37,
+                          "entity_label": "Roof Camera Angle",
+                          "auto_fail_count": 5,
+                          "urgent_count": 0,
+                          "total_count": 5
+                        }
+                      ],
+                      "errors": null
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedJson"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFoundJson"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerErrorJson"
+          }
+        }
+      }
+    },
     "/api/camera-forms": {
       "get": {
         "tags": ["Camera Forms"],
@@ -571,7 +717,7 @@
           "500": { "$ref": "#/components/responses/InternalServerErrorJson" }
         }
       },
-      "put": {
+      "post": {
         "tags": ["Camera Forms"],
         "summary": "Update an audit + associated camera forms/notes/attachments (logic preserved in your codebase)",
         "description": "Accepts multipart/form-data (images). Your controller indicates the update logic is preserved from the web version; the detailed behavior depends on your trimmed block.\n\nThe request validation supports:\n- entities.*.rating_id\n- entities.*.notes.*.id (existing note id)\n- entities.*.notes.*.remove_attachment_ids (remove attachments)\n- entities.*.remove_note_ids (remove notes)\n- entities.*.notes.*.images.* (new images)\n\nEven if you don't change anything, validation requires at least one entity to have a rating, note, image, or removal.",
