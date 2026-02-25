@@ -13,7 +13,7 @@ Route::middleware([
     AuthTokenStoreScopeMiddleware::class,
 ])->group(function () {
 
-    Route::get('audits/summary/{store_code}/{date}', [AuditController::class, 'summary']);
+    Route::get('/audits/ratings-summary/{store_id}/{date_start}/{date_end}', [AuditController::class, 'ratingsSummary']);
 
     Route::apiResource('camera-forms', CameraFormController::class);
 
