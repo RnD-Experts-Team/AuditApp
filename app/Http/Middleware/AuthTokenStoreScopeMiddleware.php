@@ -156,15 +156,18 @@ class AuthTokenStoreScopeMiddleware
     {
         $out = [];
         foreach ($params as $k => $v) {
-            // Route model binding: keep it small + deterministic
             if (is_object($v) && isset($v->id)) {
+                // Route model binding: resolved model → use integer PK
                 $out[$k] = (int) $v->id;
                 continue;
             }
+            // Scalars (strings, integers) pass through as-is
+            // e.g. store_id = "03795-00001" stays a string
             $out[$k] = $v;
         }
         return $out;
     }
+
 
     private function ksortRecursive(array &$arr): void
     {
