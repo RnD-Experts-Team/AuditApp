@@ -40,9 +40,9 @@ class AuthTokenStoreScopeMiddleware
         // 3) Build store_context EXACTLY as TokenVerifyController expects
         $storeContext = $this->buildStoreContext($request);
 
-        // 4) Redis cache: key includes token+route+method+store_context signature
-        $cache = Cache::store('redis');
-        $cacheKey = $this->verifyCacheKey($serviceName, $userToken, $request, $storeContext);
+        // // 4) Redis cache: key includes token+route+method+store_context signature
+        // $cache = Cache::store('redis');
+        // $cacheKey = $this->verifyCacheKey($serviceName, $userToken, $request, $storeContext);
 
         $verify =
             // $cache->remember($cacheKey, $cacheTtl, function () use (
