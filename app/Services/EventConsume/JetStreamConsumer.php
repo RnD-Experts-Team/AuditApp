@@ -197,10 +197,7 @@ class JetStreamConsumer
         // Real JetStream deliveries ALWAYS have a reply that starts with $JS.ACK.
         // Your "handler.*" junk has reply=null and should NOT be acked/termed/nacked.
         if (!$this->isJetStreamDelivery($reply)) {
-            Log::warning('Reply not detected as JetStream', [
-                'subject' => $subject,
-                'reply' => $reply,
-            ]);
+            return;
         }
 
         // Domain allowlist: ignore anything not matching your domain prefixes
