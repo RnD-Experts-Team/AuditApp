@@ -288,7 +288,15 @@ class JetStreamConsumer
                 return;
             }
 
-            $handlerClass = $this->router->resolve($evtSubject);
+            try {
+                $handlerClass = $this->router->resolve($evtSubject);
+            } catch (\Throwable $e) {
+                // No handler defined for this subject → not an error
+                DB::commit();
+
+                $this->ackOrTermSafe($msg, $streamName, $durable, 'no_handler_skip');
+                return;
+            }
 
             /** @var EventHandlerInterface $handler */
             $handler = app($handlerClass);
