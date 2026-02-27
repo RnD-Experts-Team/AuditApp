@@ -8,12 +8,6 @@ use Illuminate\Support\Facades\DB;
 
 class UserStoreRoleRemovedHandler implements EventHandlerInterface
 {
-    /**
-     * Set this to the role_id you want to replicate in this consumer.
-     * Example: 5
-     */
-    protected static int $replicatedRoleId = 2;
-
     public function handle(array $event): void
     {
         // Best case: assignment_id is present (points to the same id we store)
@@ -29,41 +23,51 @@ class UserStoreRoleRemovedHandler implements EventHandlerInterface
         $roleId  = $this->asInt(data_get($event, 'data.role_id') ?? data_get($event, 'role_id'));
         $storeId = $this->asNullableInt(data_get($event, 'data.store_id') ?? data_get($event, 'store_id'));
 
-        // If we don't have assignment_id, we must target by the composite identifiers.
-        if ($assignmentId <= 0) {
-            if ($userId <= 0 || $roleId <= 0) {
-                throw new \Exception('UserStoreRoleRemovedHandler: missing assignment_id and missing (user_id, role_id)');
-            }
+        // Optional: some producers might include role_name (or role.name) even on removed events.
+        $roleNameFromEvent = data_get($event, 'data.role_name')
+            ?? data_get($event, 'role_name')
+            ?? data_get($event, 'data.role.name')
+            ?? data_get($event, 'role.name');
 
-            // Only replicate/delete for the configured role_id
-            if ($roleId !== static::$replicatedRoleId) {
-                return;
-            }
-
-            DB::transaction(function () use ($userId, $roleId, $storeId) {
-                $q = UserStoreRole::query()
-                    ->where('user_id', $userId)
-                    ->where('role_name', 'role_id_' . $roleId); // must match what your Assigned handler stores
-
-                // store_id nullable means “all stores”
-                if ($storeId === null) {
-                    $q->whereNull('store_id');
-                } else {
-                    $q->where('store_id', $storeId);
-                }
-
-                // ✅ delete instead of disabling
-                $q->delete();
+        // If we have assignment_id, delete by primary key (idempotent)
+        if ($assignmentId > 0) {
+            DB::transaction(function () use ($assignmentId) {
+                UserStoreRole::query()
+                    ->whereKey($assignmentId)
+                    ->delete();
             });
 
             return;
         }
 
-        // ✅ delete instead of disabling (idempotent: if not found, nothing happens)
-        DB::transaction(function () use ($assignmentId) {
-            UserStoreRole::query()
-                ->whereKey($assignmentId)
-                ->delete();
+        // No assignment_id: we must target by identifiers.
+        if ($userId <= 0 || $roleId <= 0) {
+            throw new \Exception('UserStoreRoleRemovedHandler: missing assignment_id and missing (user_id, role_id)');
+        }
+
+        // Must match what your Assigned handler stores when no role_name is provided.
+        $fallbackRoleName = 'role_id_' . $roleId;
+
+        DB::transaction(function () use ($userId, $storeId, $roleNameFromEvent, $fallbackRoleName) {
+            $q = UserStoreRole::query()->where('user_id', $userId);
+
+            // store_id nullable means “all stores”
+            if ($storeId === null) {
+                $q->whereNull('store_id');
+            } else {
+                $q->where('store_id', $storeId);
+            }
+
+            // If role_name exists in the event, prefer deleting by that exact name;
+            // otherwise delete by our placeholder scheme.
+            if (is_string($roleNameFromEvent) && $roleNameFromEvent !== '') {
+                $q->where('role_name', $roleNameFromEvent);
+            } else {
+                $q->where('role_name', $fallbackRoleName);
+            }
+
+            // ✅ delete instead of disabling
+            $q->delete();
         });
     }
 

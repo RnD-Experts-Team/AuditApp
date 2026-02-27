@@ -10,12 +10,6 @@ use Illuminate\Support\Facades\DB;
 
 class UserStoreRoleAssignedHandler implements EventHandlerInterface
 {
-    /**
-     * ✅ Set this to the role_id you want to replicate.
-     * Example: 5 means only role_id=5 assignments will be stored in user_store_roles.
-     */
-    protected static int $replicatedRoleId = 2;
-
     public function handle(array $event): void
     {
         $a = $this->extractAssignmentPayload($event);
@@ -26,15 +20,18 @@ class UserStoreRoleAssignedHandler implements EventHandlerInterface
         $storeId = $this->asNullableInt(data_get($a, 'store_id')); // null => all stores
         $roleId  = $this->asInt(data_get($a, 'role_id'));
 
-        if ($id <= 0) throw new \Exception('UserStoreRoleAssignedHandler: missing/invalid assignment.id');
-        if ($userId <= 0) throw new \Exception('UserStoreRoleAssignedHandler: missing/invalid user_id');
-
-        // replicate ONLY the configured role_id
-        if ($roleId !== static::$replicatedRoleId) {
-            return;
+        if ($id <= 0) {
+            throw new \Exception('UserStoreRoleAssignedHandler: missing/invalid assignment.id');
+        }
+        if ($userId <= 0) {
+            throw new \Exception('UserStoreRoleAssignedHandler: missing/invalid user_id');
+        }
+        if ($roleId <= 0) {
+            // role_id should always exist; fail closed so we don't store ambiguous data
+            throw new \Exception('UserStoreRoleAssignedHandler: missing/invalid role_id');
         }
 
-        // fail closed: user/store must already exist (replicated elsewhere)
+        // Fail closed: user/store must already exist (replicated elsewhere)
         if (!User::query()->whereKey($userId)->exists()) {
             throw new \Exception("UserStoreRoleAssignedHandler: user {$userId} not synced yet");
         }
@@ -45,8 +42,10 @@ class UserStoreRoleAssignedHandler implements EventHandlerInterface
         $active = (bool) data_get($a, 'is_active', true);
         $meta   = data_get($a, 'metadata') ?? data_get($a, 'meta');
 
-        // You said “don’t handle role name”; we only need it because the table has role_name NOT NULL.
-        // Prefer any provided role_name, otherwise store a stable placeholder based on role_id.
+        /**
+         * Table has role_name NOT NULL.
+         * Prefer any provided role_name, otherwise store a stable placeholder based on role_id.
+         */
         $roleName = (string) (data_get($a, 'role_name')
             ?? data_get($a, 'role.name')
             ?? ('role_id_' . $roleId));
