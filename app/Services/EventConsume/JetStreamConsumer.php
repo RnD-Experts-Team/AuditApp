@@ -191,12 +191,10 @@ class JetStreamConsumer
     private function handleMessage($msg, string $streamName, string $durable): void
     {
         $subject = $this->getMsgSubject($msg);
-        $reply   = $this->getMsgReply($msg);
 
-        // HARD RULE:
-        // Real JetStream deliveries ALWAYS have a reply that starts with $JS.ACK.
-        // Your "handler.*" junk has reply=null and should NOT be acked/termed/nacked.
-        if (!$this->isJetStreamDelivery($reply)) {
+        // If this message cannot be ACKed, it's not a JetStream delivery.
+        // Safe to ignore.
+        if (!method_exists($msg, 'ack')) {
             return;
         }
 
