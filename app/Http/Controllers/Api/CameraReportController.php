@@ -37,7 +37,7 @@ class CameraReportController extends Controller
     public function index(Request $request)
     {
         $user = Auth::user();
-        if (! $user) {
+        if (!$user) {
             return $this->unauthorized();
         }
 
@@ -86,7 +86,7 @@ class CameraReportController extends Controller
     public function export(Request $request): StreamedResponse
     {
         $user = Auth::user();
-        if (! $user) {
+        if (!$user) {
             abort(401);
         }
 
@@ -100,9 +100,9 @@ class CameraReportController extends Controller
         $categoryGroups = $this->computeCategoryGroups($visibleEntities);
 
         $timestamp = now()->format('Y-m-d');
-        $baseName = 'camera-report_'.$timestamp;
+        $baseName = 'camera-report_' . $timestamp;
 
-        $tmpXlsxPath = storage_path('app/tmp_'.Str::random(16).'.xlsx');
+        $tmpXlsxPath = storage_path('app/tmp_' . Str::random(16) . '.xlsx');
         $this->buildReportXlsxPreviousDesignWithNotes(
             $tmpXlsxPath,
             $summary,
@@ -113,7 +113,7 @@ class CameraReportController extends Controller
 
         $attachments = $this->getReportAttachments($request, $user);
 
-        $tmpZipPath = storage_path('app/tmp_'.Str::random(16).'.zip');
+        $tmpZipPath = storage_path('app/tmp_' . Str::random(16) . '.zip');
 
         $zip = new ZipArchive;
         if ($zip->open($tmpZipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
@@ -124,12 +124,12 @@ class CameraReportController extends Controller
         $zip->addFile($tmpXlsxPath, "{$baseName}.xlsx");
 
         foreach ($attachments as $att) {
-            if (! $att->path || ! Storage::disk('public')->exists($att->path)) {
+            if (!$att->path || !Storage::disk('public')->exists($att->path)) {
                 continue;
             }
 
-            $storeSlug = Str::slug($att->store_name ?: 'store-'.$att->store_id);
-            $zipPath = "stores/{$att->store_id}-{$storeSlug}/{$att->date}/".basename($att->path);
+            $storeSlug = Str::slug($att->store_name ?: 'store-' . $att->store_id);
+            $zipPath = "stores/{$att->store_id}-{$storeSlug}/{$att->date}/" . basename($att->path);
 
             $zip->addFromString($zipPath, Storage::disk('public')->get($att->path));
         }
@@ -146,13 +146,13 @@ class CameraReportController extends Controller
             @unlink($tmpZipPath);
         }, 200, [
             'Content-Type' => 'application/zip',
-            'Content-Disposition' => 'attachment; filename="'.$baseName.'.zip"',
+            'Content-Disposition' => 'attachment; filename="' . $baseName . '.zip"',
         ]);
     }
 
     public function exportExcel(Request $request): StreamedResponse
     {
-        $user = Auth::find(1);
+        $user = Auth::user();
 
         $reportData = $this->getReportData($request, $user);
 
@@ -166,7 +166,7 @@ class CameraReportController extends Controller
         $date = now()->format('Y-m-d');
         $xlsxName = "camera_report_Excel_{$date}.xlsx";
 
-        $tmpXlsxPath = storage_path('app/tmp_'.Str::random(16).'.xlsx');
+        $tmpXlsxPath = storage_path('app/tmp_' . Str::random(16) . '.xlsx');
 
         $this->buildReportXlsxPreviousDesignWithNotes(
             $tmpXlsxPath,
@@ -181,7 +181,7 @@ class CameraReportController extends Controller
             @unlink($tmpXlsxPath);
         }, 200, [
             'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            'Content-Disposition' => 'attachment; filename="'.$xlsxName.'"',
+            'Content-Disposition' => 'attachment; filename="' . $xlsxName . '"',
         ]);
     }
 
@@ -194,7 +194,7 @@ class CameraReportController extends Controller
         $date = now()->format('Y-m-d');
         $zipName = "camera_report_Images_{$date}.zip";
 
-        $tmpZipPath = storage_path('app/tmp_'.Str::random(16).'.zip');
+        $tmpZipPath = storage_path('app/tmp_' . Str::random(16) . '.zip');
 
         $zip = new ZipArchive;
         if ($zip->open($tmpZipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
@@ -202,14 +202,14 @@ class CameraReportController extends Controller
         }
 
         foreach ($attachments as $att) {
-            if (! $att->path) {
+            if (!$att->path) {
                 continue;
             }
-            if (! Storage::disk('public')->exists($att->path)) {
+            if (!Storage::disk('public')->exists($att->path)) {
                 continue;
             }
 
-            $storeSlug = Str::slug($att->store_name ?: 'store-'.$att->store_id);
+            $storeSlug = Str::slug($att->store_name ?: 'store-' . $att->store_id);
             $folder = "stores/{$att->store_id}-{$storeSlug}/{$att->date}";
             $filename = basename($att->path);
 
@@ -226,7 +226,7 @@ class CameraReportController extends Controller
             @unlink($tmpZipPath);
         }, 200, [
             'Content-Type' => 'application/zip',
-            'Content-Disposition' => 'attachment; filename="'.$zipName.'"',
+            'Content-Disposition' => 'attachment; filename="' . $zipName . '"',
         ]);
     }
 
@@ -270,14 +270,14 @@ class CameraReportController extends Controller
             $entityId = $entity->id;
 
             foreach ($summary as $storeSummary) {
-                if (! isset($storeSummary['entities'][$entityId])) {
+                if (!isset($storeSummary['entities'][$entityId])) {
                     continue;
                 }
 
                 $entityData = $storeSummary['entities'][$entityId];
                 $ratingCounts = $entityData['rating_counts'] ?? [];
 
-                if (! is_array($ratingCounts) || count($ratingCounts) === 0) {
+                if (!is_array($ratingCounts) || count($ratingCounts) === 0) {
                     continue;
                 }
 
@@ -304,7 +304,7 @@ class CameraReportController extends Controller
         $groups = [];
         foreach ($visibleEntities as $entity) {
             $label = $entity->category->label ?? 'Uncategorized';
-            if (! isset($groups[$label])) {
+            if (!isset($groups[$label])) {
                 $groups[$label] = [
                     'label' => $label,
                     'entities' => [],
@@ -364,8 +364,8 @@ class CameraReportController extends Controller
             foreach ($group['entities'] as $entity) {
                 $colLetter = Coordinate::stringFromColumnIndex($currentColIndex);
 
-                $sheet->setCellValue($colLetter.$rowEntity, (string) $entity->entity_label);
-                $sheet->setCellValue($colLetter.$rowSub, 'Ratings');
+                $sheet->setCellValue($colLetter . $rowEntity, (string) $entity->entity_label);
+                $sheet->setCellValue($colLetter . $rowSub, 'Ratings');
 
                 $currentColIndex++;
             }
@@ -376,7 +376,7 @@ class CameraReportController extends Controller
                 $startLetter = Coordinate::stringFromColumnIndex($catStartCol);
                 $endLetter = Coordinate::stringFromColumnIndex($catEndCol);
 
-                $sheet->setCellValue($startLetter.$rowCategory, (string) $group['label']);
+                $sheet->setCellValue($startLetter . $rowCategory, (string) $group['label']);
                 $sheet->mergeCells("{$startLetter}{$rowCategory}:{$endLetter}{$rowCategory}");
 
                 $color = $palette[$catIdx % count($palette)];
@@ -397,17 +397,17 @@ class CameraReportController extends Controller
         $swLetter = Coordinate::stringFromColumnIndex($scoreWithoutCol);
         $stLetter = Coordinate::stringFromColumnIndex($scoreWithCol);
 
-        $sheet->setCellValue($swLetter.'1', 'Score Without Auto Fail');
+        $sheet->setCellValue($swLetter . '1', 'Score Without Auto Fail');
         $sheet->mergeCells("{$swLetter}1:{$swLetter}3");
 
-        $sheet->setCellValue($stLetter.'1', 'Total Score');
+        $sheet->setCellValue($stLetter . '1', 'Total Score');
         $sheet->mergeCells("{$stLetter}1:{$stLetter}3");
 
         // Notes column AFTER Total Score (restored)
         $notesCol = $currentColIndex + 2;
         $notesLetter = Coordinate::stringFromColumnIndex($notesCol);
 
-        $sheet->setCellValue($notesLetter.$rowCategory, 'Notes');
+        $sheet->setCellValue($notesLetter . $rowCategory, 'Notes');
         $sheet->mergeCells("{$notesLetter}{$rowCategory}:{$notesLetter}{$rowSub}");
 
         $lastHeaderCol = $notesCol;
@@ -433,7 +433,7 @@ class CameraReportController extends Controller
                             $count = $rc['count'] ?? 0;
                             if (is_numeric($count) && (int) $count > 0) {
                                 $label = $rc['rating_label'] ?? 'No Rating';
-                                $parts[] = ((int) $count).' '.($label ?: 'No Rating');
+                                $parts[] = ((int) $count) . ' ' . ($label ?: 'No Rating');
                             }
                         }
                         if (count($parts) > 0) {
@@ -442,7 +442,7 @@ class CameraReportController extends Controller
                         }
                     }
 
-                    $sheet->setCellValue(Coordinate::stringFromColumnIndex($col).$writeRow, $ratingText);
+                    $sheet->setCellValue(Coordinate::stringFromColumnIndex($col) . $writeRow, $ratingText);
                     $col++;
                 }
             }
@@ -453,8 +453,8 @@ class CameraReportController extends Controller
             $scoreWithAuto = $scoreData[$sid]['score_with_auto_fail'] ?? null;
 
             // Keep numeric; previous design often percent-formatted, but numeric stays correct either way.
-            $sheet->setCellValue($swLetter.$writeRow, is_numeric($scoreWithoutAuto) ? (float) $scoreWithoutAuto : null);
-            $sheet->setCellValue($stLetter.$writeRow, is_numeric($scoreWithAuto) ? (float) $scoreWithAuto : null);
+            $sheet->setCellValue($swLetter . $writeRow, is_numeric($scoreWithoutAuto) ? (float) $scoreWithoutAuto : null);
+            $sheet->setCellValue($stLetter . $writeRow, is_numeric($scoreWithAuto) ? (float) $scoreWithAuto : null);
 
             // Notes column restored (aggregated notes per visible entity)
             $notesParts = [];
@@ -464,24 +464,24 @@ class CameraReportController extends Controller
                     $entityData = $storeSummary['entities'][$entityId] ?? null;
 
                     $notes = $entityData['notes'] ?? [];
-                    if (! is_array($notes)) {
+                    if (!is_array($notes)) {
                         $notes = [];
                     }
 
                     $notes = collect($notes)
-                        ->filter(fn ($n) => is_string($n) && trim($n) !== '')
-                        ->map(fn ($n) => preg_replace("/\r\n|\r|\n/", ' ', trim($n)))
+                        ->filter(fn($n) => is_string($n) && trim($n) !== '')
+                        ->map(fn($n) => preg_replace("/\r\n|\r|\n/", ' ', trim($n)))
                         ->values()
                         ->all();
 
                     if (count($notes) > 0) {
-                        $notesParts[] = (string) $entity->entity_label.': '.implode(' | ', $notes);
+                        $notesParts[] = (string) $entity->entity_label . ': ' . implode(' | ', $notes);
                     }
                 }
             }
 
             $notesText = count($notesParts) ? implode(', ', $notesParts) : '-';
-            $sheet->setCellValue($notesLetter.$writeRow, $notesText);
+            $sheet->setCellValue($notesLetter . $writeRow, $notesText);
 
             $writeRow++;
         }
@@ -606,9 +606,9 @@ class CameraReportController extends Controller
                 'ratings.label as rating_label'
             )
             ->whereIn('stores.id', $allowedStoreIds)
-            ->when($storeId, fn ($q) => $q->where('stores.id', $storeId))
-            ->when($group, fn ($q) => $q->where('stores.group', $group))
-            ->when($reportType, fn ($q) => $q->where('entities.report_type', $reportType));
+            ->when($storeId, fn($q) => $q->where('stores.id', $storeId))
+            ->when($group, fn($q) => $q->where('stores.group', $group))
+            ->when($reportType, fn($q) => $q->where('entities.report_type', $reportType));
 
         if ($dateFrom) {
             $cameraFormsBase->where('audits.date', '>=', $dateFrom);
@@ -708,9 +708,9 @@ class CameraReportController extends Controller
                 'camera_form_notes.note as note'
             )
             ->whereIn('stores.id', $allowedStoreIds)
-            ->when($storeId, fn ($q) => $q->where('stores.id', $storeId))
-            ->when($group, fn ($q) => $q->where('stores.group', $group))
-            ->when($reportType, fn ($q) => $q->where('entities.report_type', $reportType));
+            ->when($storeId, fn($q) => $q->where('stores.id', $storeId))
+            ->when($group, fn($q) => $q->where('stores.group', $group))
+            ->when($reportType, fn($q) => $q->where('entities.report_type', $reportType));
 
         if ($dateFrom) {
             $notesBase->where('audits.date', '>=', $dateFrom);
@@ -810,7 +810,7 @@ class CameraReportController extends Controller
                 }
             }
 
-            $valsWithoutAuto = array_filter($perDateScoresWithoutAuto, fn ($v) => is_numeric($v));
+            $valsWithoutAuto = array_filter($perDateScoresWithoutAuto, fn($v) => is_numeric($v));
             $finalScoreWithoutAuto = count($valsWithoutAuto)
                 ? round(array_sum($valsWithoutAuto) / count($valsWithoutAuto), 2)
                 : null;
@@ -874,9 +874,9 @@ class CameraReportController extends Controller
                 'a.path as path'
             )
             ->whereIn('stores.id', $allowedStoreIds)
-            ->when($storeId, fn ($qq) => $qq->where('stores.id', $storeId))
-            ->when($group, fn ($qq) => $qq->where('stores.group', $group))
-            ->when($reportType, fn ($qq) => $qq->where('entities.report_type', $reportType));
+            ->when($storeId, fn($qq) => $qq->where('stores.id', $storeId))
+            ->when($group, fn($qq) => $qq->where('stores.group', $group))
+            ->when($reportType, fn($qq) => $qq->where('entities.report_type', $reportType));
 
         if ($dateFrom) {
             $q->where('audits.date', '>=', $dateFrom);
@@ -902,7 +902,7 @@ class CameraReportController extends Controller
                 ->pluck('entity_id')
                 ->toArray();
 
-            if (! empty($selectedEntityIds)) {
+            if (!empty($selectedEntityIds)) {
                 $q->whereIn('entities.id', $selectedEntityIds);
             } else {
                 $q->whereRaw('1 = 0');
