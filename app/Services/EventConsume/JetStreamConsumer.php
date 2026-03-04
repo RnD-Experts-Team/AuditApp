@@ -25,13 +25,13 @@ class JetStreamConsumer
 
     /**
      * Delay for retries when handler fails (prevents tight redelivery loop).
-     * NOTE: This delay works only if the library supports nack($delaySeconds).
+     * NOTE: delay is best-effort; if client nack delay isn't supported, it will NAK without delay.
      */
     private const NACK_DELAY_SECONDS = 2;
 
     /**
      * Domain subjects prefix allowlist.
-     * We ignore anything else (including the internal "handler.*" junk you saw).
+     * We ignore anything else (including internal control/status frames).
      */
     private const SUBJECT_ALLOW_PREFIXES = [
         'auth.v1.',
@@ -40,7 +40,7 @@ class JetStreamConsumer
     private ?Client $client = null;
 
     /**
-     * Cache consumer objects per stream+durable so we don't "create called" every loop.
+     * Cache consumer objects per stream+durable so we don't keep re-initializing.
      * @var array<string, mixed>
      */
     private array $consumerCache = [];
@@ -48,7 +48,8 @@ class JetStreamConsumer
     public function __construct(
         private readonly NatsClientFactory $factory,
         private readonly EventRouter $router,
-    ) {}
+    ) {
+    }
 
     public function runForever(): void
     {
@@ -57,13 +58,12 @@ class JetStreamConsumer
             throw new Exception('No streams configured in nats.streams');
         }
 
-        $batch     = (int) config('nats.pull.batch', 25);
+        $batch = (int) config('nats.pull.batch', 25);
         $timeoutMs = (int) config('nats.pull.timeout_ms', 2000);
-        $sleepMs   = (int) config('nats.pull.sleep_ms', 250);
+        $sleepMs = (int) config('nats.pull.sleep_ms', 250);
 
         // IMPORTANT: create ONE client and reuse it forever.
         $this->client = $this->factory->make();
-
 
         while (true) {
             try {
@@ -87,8 +87,8 @@ class JetStreamConsumer
      */
     private function consumeStream(array $cfg, int $batch, int $timeoutMs): void
     {
-        $streamName    = (string) ($cfg['name'] ?? '');
-        $durable       = (string) ($cfg['durable'] ?? '');
+        $streamName = (string) ($cfg['name'] ?? '');
+        $durable = (string) ($cfg['durable'] ?? '');
         $filterSubject = (string) ($cfg['filter_subject'] ?? '>');
 
         if ($streamName === '' || $durable === '') {
@@ -149,12 +149,12 @@ class JetStreamConsumer
             return $this->consumerCache[$key];
         }
 
-        $api    = $this->client->getApi();
+        $api = $this->client->getApi();
         $stream = $api->getStream($streamName);
 
         $consumer = $stream->getConsumer($durable);
 
-        // Try to set subject filter on client-side config (safe best effort).
+        // Best-effort: set client-side filter (server filter is what actually matters).
         try {
             if (method_exists($consumer, 'getConfiguration')) {
                 $cfg = $consumer->getConfiguration();
@@ -171,64 +171,63 @@ class JetStreamConsumer
             ]);
         }
 
-        // Some versions require create() to initialize internals; call once only.
-        try {
-            if (method_exists($consumer, 'create')) {
-                $consumer->create();
-            }
-        } catch (Throwable $e) {
-            // If server consumer exists, create() may still be fine; if it throws, we still keep going.
-            Log::debug('Consumer create() threw (continuing if server consumer exists)', [
-                'stream' => $streamName,
-                'durable' => $durable,
-                'error' => $e->getMessage(),
-            ]);
-        }
+        /**
+         * IMPORTANT:
+         * Do NOT call $consumer->create() here.
+         * You already created the consumer via CLI.
+         * Calling create() can produce internal request/reply traffic that some library versions
+         * may surface into the same receive path as pull messages.
+         */
 
         return $this->consumerCache[$key] = $consumer;
     }
 
     private function handleMessage($msg, string $streamName, string $durable): void
     {
-        $subject = $this->getMsgSubject($msg);
-
-        // If this message cannot be ACKed, it's not a JetStream delivery.
-        // Safe to ignore.
-        if (!method_exists($msg, 'ack')) {
+        /**
+         * Hard gate:
+         * Only real JetStream deliveries have a $JS.ACK.* reply subject.
+         * Control/status frames (and any internal inbox messages) must be ignored,
+         * and MUST NOT be acked/termed/nacked (they’re not part of ack pending).
+         */
+        $reply = $this->getMsgReply($msg);
+        if (!$this->isJetStreamDelivery($reply)) {
             return;
         }
 
+        $subject = $this->getMsgSubject($msg);
+
         // Domain allowlist: ignore anything not matching your domain prefixes
+        // NOTE: for real JS deliveries, subject should already be the stream subject.
         if (!$this->isAllowedDomainSubject($subject)) {
-            // ACK/TERM so it does not keep coming back to this consumer.
-            $this->ackOrTermSafe($msg, $streamName, $durable, 'subject_not_allowed');
+            // Term it so it never blocks ack-pending.
+            $this->termSafe($msg, $streamName, $durable, 'subject_not_allowed');
             return;
         }
 
         $raw = $this->extractBody($msg);
 
         if ($raw === '') {
-            // For real JetStream delivery with empty payload: poison → ACK/TERM it once.
-            $this->ackOrTermSafe($msg, $streamName, $durable, 'empty_payload');
+            // Poison → TERM it once so it never redelivers and never blocks.
+            $this->termSafe($msg, $streamName, $durable, 'empty_payload');
             return;
         }
 
         $event = json_decode($raw, true);
 
         if (!is_array($event)) {
-            $this->ackOrTermSafe($msg, $streamName, $durable, 'non_json_payload');
+            $this->termSafe($msg, $streamName, $durable, 'non_json_payload');
             return;
         }
 
-        $eventId    = (string) ($event['id'] ?? '');
+        $eventId = (string) ($event['id'] ?? '');
         $evtSubject = (string) ($event['subject'] ?? $event['type'] ?? '');
-        $source     = (string) ($event['source'] ?? '');
+        $source = (string) ($event['source'] ?? '');
 
         if ($eventId === '' || $evtSubject === '') {
-            $this->ackOrTermSafe($msg, $streamName, $durable, 'missing_id_or_subject');
+            $this->termSafe($msg, $streamName, $durable, 'missing_id_or_subject');
             return;
         }
-
 
         DB::beginTransaction();
 
@@ -262,10 +261,9 @@ class JetStreamConsumer
             // If parked, never retry
             if ($inbox && $inbox->parked_at) {
                 DB::commit();
-                $this->ackOrTermSafe($msg, $streamName, $durable, 'already_parked');
+                $this->ackSafe($msg, $streamName, $durable, 'already_parked');
 
-                // Keep this warning (rare)
-                Log::warning('Event is parked - ACKed/TERMed and skipped', [
+                Log::warning('Event is parked - ACKed and skipped', [
                     'stream' => $streamName,
                     'consumer' => $durable,
                     'event_id' => $eventId,
@@ -279,17 +277,16 @@ class JetStreamConsumer
             // If processed, ACK and exit
             if ($inbox && $inbox->processed_at) {
                 DB::commit();
-                $this->ackOrTermSafe($msg, $streamName, $durable, 'already_processed');
+                $this->ackSafe($msg, $streamName, $durable, 'already_processed');
                 return;
             }
 
             try {
                 $handlerClass = $this->router->resolve($evtSubject);
-            } catch (\Throwable $e) {
+            } catch (Throwable $e) {
                 // No handler defined for this subject → not an error
                 DB::commit();
-
-                $this->ackOrTermSafe($msg, $streamName, $durable, 'no_handler_skip');
+                $this->ackSafe($msg, $streamName, $durable, 'no_handler_skip');
                 return;
             }
 
@@ -302,7 +299,7 @@ class JetStreamConsumer
             $inbox->save();
 
             DB::commit();
-            $this->ackOrTermSafe($msg, $streamName, $durable, 'processed_ok');
+            $this->ackSafe($msg, $streamName, $durable, 'processed_ok');
         } catch (Throwable $e) {
             // On handler failure: increment attempts and decide retry vs park
             try {
@@ -320,25 +317,31 @@ class JetStreamConsumer
                         $locked->save();
 
                         DB::commit();
-                        $this->ackOrTermSafe($msg, $streamName, $durable, 'parked_max_attempts');
+
+                        // Poison/too-many-attempts must NEVER stall the pipeline → TERM it.
+                        $this->termSafe($msg, $streamName, $durable, 'parked_max_attempts');
                         return;
                     }
 
                     $locked->save();
 
                     DB::commit();
+
+                    // Retry by NAK (best effort delay)
                     $this->nackWithDelaySafe($msg, $streamName, $durable, self::NACK_DELAY_SECONDS, 'handler_failed_retry');
                     return;
                 }
 
-                // If no locked row (shouldn't happen): rollback and retry
                 DB::rollBack();
                 $this->nackWithDelaySafe($msg, $streamName, $durable, self::NACK_DELAY_SECONDS, 'missing_inbox_row');
             } catch (Throwable $inner) {
                 DB::rollBack();
+
+                // If we cannot update attempts, we still must avoid stalling delivery:
+                // NAK (retry) is safer than leaving it pending forever.
                 $this->nackWithDelaySafe($msg, $streamName, $durable, self::NACK_DELAY_SECONDS, 'attempt_update_failed');
 
-                Log::error('Event failed and attempts could not be updated - NACKed', [
+                Log::error('Event failed and attempts could not be updated - NAKed', [
                     'stream' => $streamName,
                     'consumer' => $durable,
                     'event_id' => $eventId,
@@ -352,12 +355,13 @@ class JetStreamConsumer
 
     private function isJetStreamDelivery(?string $reply): bool
     {
-        return is_string($reply) && str_starts_with($reply, '$JS.ACK.');
+        return is_string($reply) && $reply !== '' && str_starts_with($reply, '$JS.ACK.');
     }
 
     private function isAllowedDomainSubject(?string $subject): bool
     {
-        if (!is_string($subject) || $subject === '') return false;
+        if (!is_string($subject) || $subject === '')
+            return false;
 
         foreach (self::SUBJECT_ALLOW_PREFIXES as $prefix) {
             if ($prefix !== '' && str_starts_with($subject, $prefix)) {
@@ -370,12 +374,12 @@ class JetStreamConsumer
 
     /**
      * Most common for Basis\Nats\Message\Msg is: public string $payload
-     * Your previous extractor was missing this, which is why you saw payload_len=0.
      */
     private function extractBody($msg): string
     {
         try {
-            if (!is_object($msg)) return '';
+            if (!is_object($msg))
+                return '';
 
             if (property_exists($msg, 'payload') && is_string($msg->payload)) {
                 return $msg->payload;
@@ -387,7 +391,8 @@ class JetStreamConsumer
 
             if (method_exists($msg, 'getBody')) {
                 $b = $msg->getBody();
-                if (is_string($b)) return $b;
+                if (is_string($b))
+                    return $b;
             }
 
             if (method_exists($msg, '__toString')) {
@@ -401,27 +406,41 @@ class JetStreamConsumer
         return '';
     }
 
-    private function payloadLenSafe($msg): int
-    {
-        try {
-            $raw = $this->extractBody($msg);
-            return strlen($raw);
-        } catch (Throwable $e) {
-            return 0;
-        }
-    }
-
+    /**
+     * Strong reply extractor: covers public props, getters, and protected/private props via reflection.
+     */
     private function getMsgReply($msg): ?string
     {
         try {
-            if (!is_object($msg)) return null;
+            if (!is_object($msg))
+                return null;
 
             foreach (['replyTo', 'reply_to', 'reply', 'replySubject', 'reply_subject'] as $k) {
                 if (property_exists($msg, $k) && is_string($msg->{$k}) && $msg->{$k} !== '') {
                     return $msg->{$k};
                 }
             }
+
+            foreach (['getReplyTo', 'getReply', 'reply'] as $m) {
+                if (method_exists($msg, $m)) {
+                    $v = $msg->{$m}();
+                    if (is_string($v) && $v !== '')
+                        return $v;
+                }
+            }
+
+            $ro = new \ReflectionObject($msg);
+            foreach (['replyTo', 'reply', 'reply_subject', 'replySubject'] as $k) {
+                if ($ro->hasProperty($k)) {
+                    $p = $ro->getProperty($k);
+                    $p->setAccessible(true);
+                    $v = $p->getValue($msg);
+                    if (is_string($v) && $v !== '')
+                        return $v;
+                }
+            }
         } catch (Throwable $e) {
+            // ignore
         }
 
         return null;
@@ -433,45 +452,64 @@ class JetStreamConsumer
             if (is_object($msg) && property_exists($msg, 'subject') && is_string($msg->subject)) {
                 return $msg->subject;
             }
+
+            // Reflection fallback (some versions hide it)
+            if (is_object($msg)) {
+                $ro = new \ReflectionObject($msg);
+                if ($ro->hasProperty('subject')) {
+                    $p = $ro->getProperty('subject');
+                    $p->setAccessible(true);
+                    $v = $p->getValue($msg);
+                    if (is_string($v) && $v !== '')
+                        return $v;
+                }
+            }
         } catch (Throwable $e) {
+            // ignore
         }
 
         return null;
     }
 
     /**
-     * ACK sometimes throws in Basis if internal ack object cannot be built.
-     * TERM (if available) is a safe fallback for poison messages.
+     * ACK that cannot stall the pipeline:
+     * - Only for real JS deliveries
+     * - Try library ack()
+     * - Fallback: publish "+ACK" to the reply subject directly
      */
-    private function ackOrTermSafe($msg, string $streamName, string $durable, string $reason): void
+    private function ackSafe($msg, string $streamName, string $durable, string $reason): void
     {
+        $reply = $this->getMsgReply($msg);
+        if (!$this->isJetStreamDelivery($reply)) {
+            return;
+        }
+
         try {
             if (method_exists($msg, 'ack')) {
                 $msg->ack();
-
                 return;
             }
         } catch (Throwable $e) {
-            Log::warning('ACK failed (will try TERM if available)', [
+            Log::warning('ACK failed; will fallback to manual +ACK publish', [
                 'stream' => $streamName,
                 'consumer' => $durable,
                 'reason' => $reason,
                 'subject' => $this->getMsgSubject($msg),
-                'reply' => $this->getMsgReply($msg),
+                'reply' => $reply,
                 'error' => $e->getMessage(),
                 'exception' => get_class($e),
             ]);
         }
 
+        // Manual ack (JetStream internal protocol): publish "+ACK" to reply subject
         try {
-            if (method_exists($msg, 'term')) {
-                $msg->term();
-            }
+            $this->client?->publish($reply, '+ACK');
         } catch (Throwable $e) {
-            Log::warning('TERM failed', [
+            Log::error('Manual +ACK publish failed', [
                 'stream' => $streamName,
                 'consumer' => $durable,
                 'reason' => $reason,
+                'reply' => $reply,
                 'error' => $e->getMessage(),
                 'exception' => get_class($e),
             ]);
@@ -479,29 +517,105 @@ class JetStreamConsumer
     }
 
     /**
-     * basis-company/nats.php uses nack($delaySeconds).
-     * Some older code uses nak(). We support both.
+     * TERM that cannot stall the pipeline:
+     * - Only for real JS deliveries
+     * - Try library term()
+     * - Fallback: publish "+TERM" to the reply subject directly
      */
-    private function nackWithDelaySafe($msg, string $streamName, string $durable, int $delaySeconds, string $reason): void
+    private function termSafe($msg, string $streamName, string $durable, string $reason): void
     {
-        try {
-            if (method_exists($msg, 'nack')) {
-                $msg->nack($delaySeconds);
+        $reply = $this->getMsgReply($msg);
+        if (!$this->isJetStreamDelivery($reply)) {
+            return;
+        }
 
+        try {
+            if (method_exists($msg, 'term')) {
+                $msg->term();
                 return;
             }
-
-            if (method_exists($msg, 'nak')) {
-                // No delay support on nak()
-                $msg->nak();
-            }
         } catch (Throwable $e) {
-            Log::warning('NACK/NAK failed', [
+            Log::warning('TERM failed; will fallback to manual +TERM publish', [
                 'stream' => $streamName,
                 'consumer' => $durable,
                 'reason' => $reason,
                 'subject' => $this->getMsgSubject($msg),
-                'reply' => $this->getMsgReply($msg),
+                'reply' => $reply,
+                'error' => $e->getMessage(),
+                'exception' => get_class($e),
+            ]);
+        }
+
+        // Manual term (JetStream internal protocol): publish "+TERM" to reply subject
+        try {
+            $this->client?->publish($reply, '+TERM');
+        } catch (Throwable $e) {
+            Log::error('Manual +TERM publish failed', [
+                'stream' => $streamName,
+                'consumer' => $durable,
+                'reason' => $reason,
+                'reply' => $reply,
+                'error' => $e->getMessage(),
+                'exception' => get_class($e),
+            ]);
+        }
+    }
+
+    /**
+     * NAK with delay best effort:
+     * - Only for real JS deliveries
+     * - Try library nack($delaySeconds) or nak()
+     * - Fallback: publish "-NAK" (and if delay > 0, include JSON delay in nanoseconds)
+     *
+     * NOTE: If the server/client doesn't honor delay JSON for your version, it will still retry.
+     * The critical goal here is: NEVER leave the message pending forever.
+     */
+    private function nackWithDelaySafe($msg, string $streamName, string $durable, int $delaySeconds, string $reason): void
+    {
+        $reply = $this->getMsgReply($msg);
+        if (!$this->isJetStreamDelivery($reply)) {
+            return;
+        }
+
+        try {
+            if (method_exists($msg, 'nack')) {
+                $msg->nack($delaySeconds);
+                return;
+            }
+
+            if (method_exists($msg, 'nak')) {
+                $msg->nak();
+                return;
+            }
+        } catch (Throwable $e) {
+            Log::warning('NACK/NAK failed; will fallback to manual -NAK publish', [
+                'stream' => $streamName,
+                'consumer' => $durable,
+                'reason' => $reason,
+                'subject' => $this->getMsgSubject($msg),
+                'reply' => $reply,
+                'error' => $e->getMessage(),
+                'exception' => get_class($e),
+            ]);
+        }
+
+        // Manual nak (JetStream internal protocol): publish "-NAK" to reply subject
+        try {
+            $payload = '-NAK';
+
+            // Best-effort delay format (nanoseconds) used by several clients/servers:
+            if ($delaySeconds > 0) {
+                $ns = (int) $delaySeconds * 1_000_000_000;
+                $payload = '-NAK {"delay":' . $ns . '}';
+            }
+
+            $this->client?->publish($reply, $payload);
+        } catch (Throwable $e) {
+            Log::error('Manual -NAK publish failed', [
+                'stream' => $streamName,
+                'consumer' => $durable,
+                'reason' => $reason,
+                'reply' => $reply,
                 'error' => $e->getMessage(),
                 'exception' => get_class($e),
             ]);
