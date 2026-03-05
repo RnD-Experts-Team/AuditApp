@@ -231,6 +231,7 @@ class SyncAuditData extends Command
 
     public function syncAttachment($attachmentData, $noteId)
     {
+        // Create or update the attachment record in the database
         $attachment = CameraFormNoteAttachment::updateOrCreate(
             ['id' => $attachmentData['id']],
             [
@@ -239,45 +240,31 @@ class SyncAuditData extends Command
             ]
         );
 
-        // Define retry parameters
-        $maxRetries = 3;
-        $attempt = 0;
-        $success = false;
+        // We will use the old system's file path exactly as is, so no need to alter it
+        $filePath = $attachmentData['path'];  // No changes to the path, it's directly used
 
-        // Retry the download if it fails initially
-        while ($attempt < $maxRetries && !$success) {
-            try {
-                $filePath = 'attachments/' . basename($attachmentData['path']);
+        try {
+            // Log the attempt to store the file
+            $this->info("Storing attachment at: {$filePath}");
 
-                // Make the HTTP GET request with a longer timeout
-                $content = Http::timeout(60) // Increase the timeout to 60 seconds
-                    ->get($attachmentData['path']);
-
-                // Check if the request was successful
-                if ($content->successful()) {
-                    // Store the file content
-                    Storage::put($filePath, $content->body());
-                    $success = true;
-                    $this->info("Attachment downloaded successfully: {$attachmentData['path']}");
-                } else {
-                    // Log if the request failed
-                    $this->warn("Attachment download failed with status: {$content->status()} - {$attachmentData['path']}");
-                }
-            } catch (\Exception $e) {
-                // If an exception occurs (e.g., connection failure, timeout)
-                $this->warn("Error downloading attachment {$attachmentData['path']}: {$e->getMessage()}");
+            // Check if the directory exists, if not, create it
+            $directory = dirname($filePath);
+            if (!Storage::exists($directory)) {
+                Storage::makeDirectory($directory);  // Create directory if it doesn't exist
+                $this->info("Created directory: {$directory}");
             }
 
-            $attempt++;
-
-            if (!$success) {
-                $this->warn("Retrying attachment download for: {$attachmentData['path']} ({$attempt}/{$maxRetries})");
+            // Now store the file exactly as it is in the old system
+            $content = Http::get($attachmentData['path']);  // Assuming the URL is still accessible
+            if ($content->successful()) {
+                // Save the file in the same path structure
+                Storage::put($filePath, $content->body());
+                $this->info("Attachment stored successfully at: {$filePath}");
+            } else {
+                $this->warn("Failed to download attachment from: {$attachmentData['path']}");
             }
-        }
-
-        // Log after retries, if still failed
-        if (!$success) {
-            $this->error("Failed to download attachment after {$maxRetries} attempts: {$attachmentData['path']}");
+        } catch (\Exception $e) {
+            $this->error("Error storing attachment {$attachmentData['path']}: {$e->getMessage()}");
         }
     }
 }
