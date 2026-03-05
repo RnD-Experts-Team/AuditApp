@@ -232,16 +232,52 @@ class SyncAuditData extends Command
     public function syncAttachment($attachmentData, $noteId)
     {
         $attachment = CameraFormNoteAttachment::updateOrCreate(
-            ['source_attachment_id' => $attachmentData['id']],
+            ['id' => $attachmentData['id']],
             [
                 'camera_form_note_id' => $noteId,
-                'path' => $attachmentData['path'],
+                'path' => basename($attachmentData['path']),
             ]
         );
 
-        // Download and store the attachment
-        $filePath = 'attachments/' . basename($attachmentData['path']);
-        $content = Http::get($attachmentData['path']);
-        \Storage::put($filePath, $content->body());
+        // Define retry parameters
+        $maxRetries = 3;
+        $attempt = 0;
+        $success = false;
+
+        // Retry the download if it fails initially
+        while ($attempt < $maxRetries && !$success) {
+            try {
+                $filePath = 'attachments/' . basename($attachmentData['path']);
+
+                // Make the HTTP GET request with a longer timeout
+                $content = Http::timeout(60) // Increase the timeout to 60 seconds
+                    ->get($attachmentData['path']);
+
+                // Check if the request was successful
+                if ($content->successful()) {
+                    // Store the file content
+                    Storage::put($filePath, $content->body());
+                    $success = true;
+                    $this->info("Attachment downloaded successfully: {$attachmentData['path']}");
+                } else {
+                    // Log if the request failed
+                    $this->warn("Attachment download failed with status: {$content->status()} - {$attachmentData['path']}");
+                }
+            } catch (\Exception $e) {
+                // If an exception occurs (e.g., connection failure, timeout)
+                $this->warn("Error downloading attachment {$attachmentData['path']}: {$e->getMessage()}");
+            }
+
+            $attempt++;
+
+            if (!$success) {
+                $this->warn("Retrying attachment download for: {$attachmentData['path']} ({$attempt}/{$maxRetries})");
+            }
+        }
+
+        // Log after retries, if still failed
+        if (!$success) {
+            $this->error("Failed to download attachment after {$maxRetries} attempts: {$attachmentData['path']}");
+        }
     }
 }
