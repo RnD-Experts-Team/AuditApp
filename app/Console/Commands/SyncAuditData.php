@@ -13,6 +13,7 @@ use App\Models\CameraFormNoteAttachment;
 use Carbon\Carbon;
 use Http;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage; // <-- Add this line
 
 class SyncAuditData extends Command
 {
