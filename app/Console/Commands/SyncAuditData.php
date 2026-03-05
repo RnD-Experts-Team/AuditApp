@@ -12,6 +12,7 @@ use App\Models\CameraFormNote;
 use App\Models\CameraFormNoteAttachment;
 use Carbon\Carbon;
 use Http;
+use Illuminate\Support\Facades\DB;
 
 class SyncAuditData extends Command
 {
@@ -79,29 +80,116 @@ class SyncAuditData extends Command
 
     public function syncAudit($auditData)
     {
-        // Match user by email
-        $user = User::where('email', strtolower($auditData['email']))->first();
+        if (empty($auditData['id'])) {
+            $this->warn("Skipping audit: missing ID");
+            return;
+        }
 
-        // Match entity by label
-        $entity = Entity::where('entity_label', $auditData['entity_label'])->first();
+        DB::beginTransaction();
 
-        // Match store by name (field in the store model is `store`, not `store_name`)
-        $store = Store::where('store', $auditData['store'])->first(); // Corrected here
+        try {
 
-        // Create or update the audit record
-        $audit = Audit::updateOrCreate(
-            ['source_audit_id' => $auditData['id']],
-            [
-                'store_id' => $store->id,
-                'user_id' => $user->id,
-                'date' => $auditData['date'],
-                'rating_id' => $auditData['rating_id'],
-            ]
-        );
+            $user = null;
+            if (!empty($auditData['email'])) {
+                $user = User::where('email', strtolower($auditData['email']))->first();
+            }
 
-        // Sync associated camera forms
-        foreach ($auditData['camera_forms'] as $cameraFormData) {
-            $this->syncCameraForm($cameraFormData, $audit->id, $entity->id);
+            $store = null;
+            if (!empty($auditData['store'])) {
+                $store = Store::where('store', $auditData['store'])->first();
+            }
+
+            if (!$store) {
+                $this->warn("Audit {$auditData['id']} skipped — store not found");
+                DB::rollBack();
+                return;
+            }
+
+            $audit = Audit::updateOrCreate(
+                ['id' => $auditData['id']],
+                [
+                    'store_id' => $store->id,
+                    'user_id' => $user?->id,
+                    'date' => $auditData['date'] ?? now(),
+                ]
+            );
+
+            if (!empty($auditData['camera_forms'])) {
+
+                foreach ($auditData['camera_forms'] as $cameraFormData) {
+
+                    $entity = null;
+
+                    if (!empty($cameraFormData['entity_label'])) {
+                        $entity = Entity::where('entity_label', $cameraFormData['entity_label'])->first();
+                    }
+
+                    if (!$entity) {
+                        $this->warn("Camera form {$cameraFormData['id']} skipped — entity not found");
+                        continue;
+                    }
+
+                    $cameraForm = CameraForm::updateOrCreate(
+                        ['id' => $cameraFormData['id']],
+                        [
+                            'user_id' => $user?->id,
+                            'entity_id' => $entity->id,
+                            'audit_id' => $audit->id,
+                            'rating_id' => $cameraFormData['rating_id'] ?? null
+                        ]
+                    );
+
+                    if (!empty($cameraFormData['notes'])) {
+
+                        foreach ($cameraFormData['notes'] as $noteData) {
+
+                            $note = CameraFormNote::updateOrCreate(
+                                ['id' => $noteData['id']],
+                                [
+                                    'camera_form_id' => $cameraForm->id,
+                                    'note' => $noteData['note'] ?? ''
+                                ]
+                            );
+
+                            if (!empty($noteData['attachments'])) {
+
+                                foreach ($noteData['attachments'] as $attachmentData) {
+
+                                    $attachment = CameraFormNoteAttachment::updateOrCreate(
+                                        ['id' => $attachmentData['id']],
+                                        [
+                                            'camera_form_note_id' => $note->id,
+                                            'path' => basename($attachmentData['path'])
+                                        ]
+                                    );
+
+                                    if (!Storage::exists($attachment->path)) {
+
+                                        try {
+                                            $content = Http::timeout(30)->get($attachmentData['path']);
+
+                                            if ($content->successful()) {
+                                                Storage::put($attachment->path, $content->body());
+                                            }
+
+                                        } catch (\Exception $e) {
+                                            $this->warn("Attachment download failed: {$attachmentData['path']}");
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            DB::commit();
+
+        } catch (\Throwable $e) {
+
+            DB::rollBack();
+
+            $this->error("Audit {$auditData['id']} failed: " . $e->getMessage());
         }
     }
 
