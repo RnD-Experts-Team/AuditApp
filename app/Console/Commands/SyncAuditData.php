@@ -80,7 +80,7 @@ class SyncAuditData extends Command
     public function syncAudit($auditData)
     {
         // Match user by email
-        $user = User::where('email', strtolower($auditData['user_email']))->first();
+        $user = User::where('email', strtolower($auditData['email']))->first();
 
         // Match entity by label
         $entity = Entity::where('entity_label', $auditData['entity_label'])->first();
