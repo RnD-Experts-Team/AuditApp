@@ -55,42 +55,55 @@ class AuditController extends Controller
 
     public function getDataByDateRange(Request $request)
     {
-        // Get date range from the request
         $startDate = Carbon::parse($request->input('start_date'));
         $endDate = Carbon::parse($request->input('end_date'));
 
-        // Get all audits within the date range
-        $audits = Audit::whereBetween('date', [$startDate, $endDate])->get();
+        $audits = Audit::with([
+            'store:id,store',
+            'user:id,email',
+            'cameraForms.entity:id,entity_label',
+            'cameraForms.notes.attachments'
+        ])
+            ->whereBetween('date', [$startDate, $endDate])
+            ->get();
 
-        $data = [];
+        return response()->json(
+            $audits->map(function ($audit) {
 
-        foreach ($audits as $audit) {
-            // Get associated camera forms for each audit
-            $cameraForms = CameraForm::where('audit_id', $audit->id)->get();
+                return [
+                    'id' => $audit->id,
+                    'date' => $audit->date,
+                    'store' => $audit->store?->store,
+                    'email' => $audit->user?->email,
 
-            foreach ($cameraForms as $cameraForm) {
-                // Get associated notes for each camera form
-                $notes = CameraFormNote::where('camera_form_id', $cameraForm->id)->get();
+                    'camera_forms' => $audit->cameraForms->map(function ($form) {
 
-                foreach ($notes as $note) {
-                    // Get associated attachments for each note
-                    $attachments = CameraFormNoteAttachment::where('camera_form_note_id', $note->id)->get();
+                        return [
+                            'id' => $form->id,
+                            'entity_label' => $form->entity?->entity_label,
+                            'rating_id' => $form->rating_id,
 
-                    // Append attachments to the note
-                    $note->attachments = $attachments;
-                }
+                            'notes' => $form->notes->map(function ($note) {
 
-                // Append notes to the camera form
-                $cameraForm->notes = $notes;
-            }
+                                return [
+                                    'id' => $note->id,
+                                    'note' => $note->note,
 
-            // Append camera forms to the audit
-            $audit->camera_forms = $cameraForms;
+                                    'attachments' => $note->attachments->map(function ($attachment) {
+                                        return [
+                                            'id' => $attachment->id,
+                                            'path' => $attachment->path
+                                        ];
+                                    })
+                                ];
 
-            // Append the audit to the data array
-            $data[] = $audit;
-        }
+                            })
+                        ];
 
-        return response()->json($data);
+                    })
+                ];
+
+            })
+        );
     }
 }
