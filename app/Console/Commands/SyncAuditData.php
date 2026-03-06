@@ -160,23 +160,23 @@ class SyncAuditData extends Command
                                         ['id' => $attachmentData['id']],
                                         [
                                             'camera_form_note_id' => $note->id,
-                                            'path' => basename($attachmentData['path'])
+                                            'path' => $attachmentData['path']
                                         ]
                                     );
 
-                                    if (!Storage::exists($attachment->path)) {
+                                    // if (!Storage::exists($attachment->path)) {
 
-                                        try {
-                                            $content = Http::timeout(30)->get($attachmentData['path']);
+                                    //     try {
+                                    //         $content = Http::timeout(30)->get($attachmentData['path']);
 
-                                            if ($content->successful()) {
-                                                Storage::put($attachment->path, $content->body());
-                                            }
+                                    //         if ($content->successful()) {
+                                    //             Storage::put($attachment->path, $content->body());
+                                    //         }
 
-                                        } catch (\Exception $e) {
-                                            $this->warn("Attachment download failed: {$attachmentData['path']}");
-                                        }
-                                    }
+                                    //     } catch (\Exception $e) {
+                                    //         $this->warn("Attachment download failed: {$attachmentData['path']}");
+                                    //     }
+                                    // }
                                 }
                             }
                         }
@@ -194,77 +194,5 @@ class SyncAuditData extends Command
         }
     }
 
-    public function syncCameraForm($cameraFormData, $auditId, $entityId)
-    {
-        // Create or update the camera form
-        $cameraForm = CameraForm::updateOrCreate(
-            ['source_camera_form_id' => $cameraFormData['id']],
-            [
-                'user_id' => $cameraFormData['user_id'],
-                'entity_id' => $entityId,
-                'audit_id' => $auditId,
-                'rating_id' => $cameraFormData['rating_id'],
-            ]
-        );
 
-        // Sync notes
-        foreach ($cameraFormData['notes'] as $noteData) {
-            $this->syncNote($noteData, $cameraForm->id);
-        }
-    }
-
-    public function syncNote($noteData, $cameraFormId)
-    {
-        $note = CameraFormNote::updateOrCreate(
-            ['source_note_id' => $noteData['id']],
-            [
-                'camera_form_id' => $cameraFormId,
-                'note' => $noteData['note'],
-            ]
-        );
-
-        // Sync attachments
-        foreach ($noteData['attachments'] as $attachmentData) {
-            $this->syncAttachment($attachmentData, $note->id);
-        }
-    }
-
-    public function syncAttachment($attachmentData, $noteId)
-    {
-        // Create or update the attachment record in the database
-        $attachment = CameraFormNoteAttachment::updateOrCreate(
-            ['id' => $attachmentData['id']],
-            [
-                'camera_form_note_id' => $noteId,
-                'path' => basename($attachmentData['path']),
-            ]
-        );
-
-        // We will use the old system's file path exactly as is, so no need to alter it
-        $filePath = $attachmentData['path'];  // No changes to the path, it's directly used
-
-        try {
-            // Log the attempt to store the file
-            $this->info("Storing attachment at: {$filePath}");
-
-            // Check if the directory exists, if not, create it
-            $directory = dirname($filePath);
-            if (!Storage::exists($directory)) {
-                Storage::makeDirectory($directory);  // Create directory if it doesn't exist
-                $this->info("Created directory: {$directory}");
-            }
-
-            // Now store the file exactly as it is in the old system
-            $content = Http::get($attachmentData['path']);  // Assuming the URL is still accessible
-            if ($content->successful()) {
-                // Save the file in the same path structure
-                Storage::put($filePath, $content->body());
-                $this->info("Attachment stored successfully at: {$filePath}");
-            } else {
-                $this->warn("Failed to download attachment from: {$attachmentData['path']}");
-            }
-        } catch (\Exception $e) {
-            $this->error("Error storing attachment {$attachmentData['path']}: {$e->getMessage()}");
-        }
-    }
 }
