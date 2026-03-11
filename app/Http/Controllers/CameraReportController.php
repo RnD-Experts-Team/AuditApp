@@ -19,6 +19,7 @@ use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
+use App\Models\Category;
 
 class CameraReportController extends Controller
 {
@@ -32,7 +33,8 @@ class CameraReportController extends Controller
     public function index(Request $request)
     {
         $user = Auth::user();
-        if (!$user) abort(401);
+        if (!$user)
+            abort(401);
 
         $allowedStoreIds = $user->allowedStoreIdsCached();
 
@@ -55,12 +57,25 @@ class CameraReportController extends Controller
 
         $reportData = $this->getReportData($request, $user);
 
+        $categories = Category::select('id', 'label')
+            ->orderBy('sort_order')
+            ->get();
+
         return Inertia::render('CameraReports/Index', [
             'reportData' => $reportData,
-            'stores'     => $stores,
-            'groups'     => $groups,
-            'ratings'    => $ratings,
-            'filters'    => $request->only(['store_id', 'group', 'report_type', 'date_from', 'date_to', 'rating_id']),
+            'stores' => $stores,
+            'groups' => $groups,
+            'ratings' => $ratings,
+            'categories' => $categories, // ADD
+            'filters' => $request->only([
+                'store_id',
+                'group',
+                'report_type',
+                'date_from',
+                'date_to',
+                'rating_id',
+                'category_ids' // ADD
+            ]),
         ]);
     }
 
@@ -75,8 +90,8 @@ class CameraReportController extends Controller
         // 1) Build report data the same way as index
         $reportData = $this->getReportData($request, $user);
 
-        $summary   = $reportData['summary'];
-        $entities  = collect($reportData['entities']);
+        $summary = $reportData['summary'];
+        $entities = collect($reportData['entities']);
         $scoreData = $reportData['scoreData'];
 
         // 2) Compute EXACT same visible entities as frontend
@@ -86,24 +101,30 @@ class CameraReportController extends Controller
         $categoryGroups = $this->computeCategoryGroups($visibleEntities);
 
         $reportType = (string) $request->input('report_type', '');
-        $storeId    = (string) $request->input('store_id', '');
-        $group      = (string) $request->input('group', '');
-        $dateFrom   = (string) $request->input('date_from', '');
-        $dateTo     = (string) $request->input('date_to', '');
-        $ratingId   = (string) $request->input('rating_id', '');
-
+        $storeId = (string) $request->input('store_id', '');
+        $group = (string) $request->input('group', '');
+        $dateFrom = (string) $request->input('date_from', '');
+        $dateTo = (string) $request->input('date_to', '');
+        $ratingId = (string) $request->input('rating_id', '');
+        $categoryIds = $request->input('category_ids', []);
         $timestamp = now()->format('Y-m-d');
 
         $parts = [];
-        if ($reportType !== '') $parts[] = "Type-{$reportType}";
-        if ($storeId !== '')    $parts[] = "Store-{$storeId}";
-        if ($group !== '')      $parts[] = "Group-{$group}";
-        if ($ratingId !== '')   $parts[] = "Rating-{$ratingId}";
-        if ($dateFrom !== '' || $dateTo !== '') $parts[] = "{$dateFrom}_to_{$dateTo}";
-
+        if ($reportType !== '')
+            $parts[] = "Type-{$reportType}";
+        if ($storeId !== '')
+            $parts[] = "Store-{$storeId}";
+        if ($group !== '')
+            $parts[] = "Group-{$group}";
+        if ($ratingId !== '')
+            $parts[] = "Rating-{$ratingId}";
+        if ($dateFrom !== '' || $dateTo !== '')
+            $parts[] = "{$dateFrom}_to_{$dateTo}";
+        if (!empty($categoryIds))
+            $parts[] = "Cat-" . implode('-', $categoryIds);
         $baseName = 'camera-report' . (count($parts) ? '-' . implode('_', $parts) : '') . "_{$timestamp}";
         $xlsxName = "{$baseName}.xlsx";
-        $zipName  = "{$baseName}.zip";
+        $zipName = "{$baseName}.zip";
 
         // 4) Build XLSX (previous design + notes column) but only visibleEntities columns
         $tmpXlsxPath = storage_path('app/tmp_' . Str::random(16) . '.xlsx');
@@ -132,11 +153,13 @@ class CameraReportController extends Controller
         foreach ($attachments as $att) {
             $storeSlug = Str::slug($att->store_name ?: ('store-' . $att->store_id));
             $zipStoreFolder = "stores/{$att->store_id}-{$storeSlug}";
-            $zipDateFolder  = "{$zipStoreFolder}/{$att->date}";
+            $zipDateFolder = "{$zipStoreFolder}/{$att->date}";
 
             $relativePathInDisk = $att->path;
-            if (!$relativePathInDisk) continue;
-            if (!Storage::disk('public')->exists($relativePathInDisk)) continue;
+            if (!$relativePathInDisk)
+                continue;
+            if (!Storage::disk('public')->exists($relativePathInDisk))
+                continue;
 
             $fileContents = Storage::disk('public')->get($relativePathInDisk);
             $filename = basename($relativePathInDisk);
@@ -149,7 +172,7 @@ class CameraReportController extends Controller
 
         return new StreamedResponse(function () use ($tmpZipPath) {
             $out = fopen('php://output', 'w');
-            $in  = fopen($tmpZipPath, 'r');
+            $in = fopen($tmpZipPath, 'r');
             stream_copy_to_stream($in, $out);
             fclose($in);
             fclose($out);
@@ -176,7 +199,8 @@ class CameraReportController extends Controller
             $entityId = $entity->id;
 
             foreach ($summary as $storeSummary) {
-                if (!isset($storeSummary['entities'][$entityId])) continue;
+                if (!isset($storeSummary['entities'][$entityId]))
+                    continue;
 
                 $entityData = $storeSummary['entities'][$entityId];
                 $ratingCounts = $entityData['rating_counts'] ?? [];
@@ -238,9 +262,9 @@ class CameraReportController extends Controller
         $sheet->setTitle('Camera Report');
 
         $rowCategory = 1;
-        $rowEntity   = 2;
-        $rowSub      = 3;
-        $rowData     = 4;
+        $rowEntity = 2;
+        $rowSub = 3;
+        $rowData = 4;
 
         // Store header merged vertically
         $sheet->setCellValue('A1', 'Store');
@@ -278,7 +302,7 @@ class CameraReportController extends Controller
 
             if ($catEndCol >= $catStartCol) {
                 $startLetter = Coordinate::stringFromColumnIndex($catStartCol);
-                $endLetter   = Coordinate::stringFromColumnIndex($catEndCol);
+                $endLetter = Coordinate::stringFromColumnIndex($catEndCol);
 
                 $sheet->setCellValue($startLetter . $rowCategory, (string) $group['label']);
                 $sheet->mergeCells("{$startLetter}{$rowCategory}:{$endLetter}{$rowCategory}");
@@ -288,7 +312,7 @@ class CameraReportController extends Controller
 
                 $categoryRanges[] = [
                     'start' => $catStartCol,
-                    'end'   => $catEndCol,
+                    'end' => $catEndCol,
                     'color' => $color,
                 ];
             }
@@ -296,7 +320,7 @@ class CameraReportController extends Controller
 
         // Score columns
         $scoreWithoutCol = $currentColIndex;
-        $scoreWithCol    = $currentColIndex + 1;
+        $scoreWithCol = $currentColIndex + 1;
 
         $swLetter = Coordinate::stringFromColumnIndex($scoreWithoutCol);
         $stLetter = Coordinate::stringFromColumnIndex($scoreWithCol);
@@ -335,9 +359,9 @@ class CameraReportController extends Controller
                         $parts = [];
                         foreach ($entityData['rating_counts'] as $rc) {
                             $count = $rc['count'] ?? 0;
-                            if (is_numeric($count) && (int)$count > 0) {
+                            if (is_numeric($count) && (int) $count > 0) {
                                 $label = $rc['rating_label'] ?? 'No Rating';
-                                $parts[] = ((int)$count) . ' ' . ($label ?: 'No Rating');
+                                $parts[] = ((int) $count) . ' ' . ($label ?: 'No Rating');
                             }
                         }
                         if (count($parts) > 0) {
@@ -354,7 +378,7 @@ class CameraReportController extends Controller
             // Scores
             $sid = (string) ($storeSummary['store_id'] ?? '');
             $scoreWithoutAuto = $scoreData[$sid]['score_without_auto_fail'] ?? null;
-            $scoreWithAuto    = $scoreData[$sid]['score_with_auto_fail'] ?? null;
+            $scoreWithAuto = $scoreData[$sid]['score_with_auto_fail'] ?? null;
 
             // Keep numeric; previous design often percent-formatted, but numeric stays correct either way.
             $sheet->setCellValue($swLetter . $writeRow, is_numeric($scoreWithoutAuto) ? (float) $scoreWithoutAuto : null);
@@ -368,7 +392,8 @@ class CameraReportController extends Controller
                     $entityData = $storeSummary['entities'][$entityId] ?? null;
 
                     $notes = $entityData['notes'] ?? [];
-                    if (!is_array($notes)) $notes = [];
+                    if (!is_array($notes))
+                        $notes = [];
 
                     $notes = collect($notes)
                         ->filter(fn($n) => is_string($n) && trim($n) !== '')
@@ -406,8 +431,8 @@ class CameraReportController extends Controller
         $sheet->getStyle("{$notesLetter}1:{$notesLetter}{$lastDataRow}")->applyFromArray([
             'alignment' => [
                 'horizontal' => Alignment::HORIZONTAL_LEFT,
-                'vertical'   => Alignment::VERTICAL_TOP,
-                'wrapText'   => true,
+                'vertical' => Alignment::VERTICAL_TOP,
+                'wrapText' => true,
             ],
         ]);
 
@@ -428,7 +453,7 @@ class CameraReportController extends Controller
         // Category coloring across entity columns (headers + data)
         foreach ($categoryRanges as $r) {
             $startLetter = Coordinate::stringFromColumnIndex($r['start']);
-            $endLetter   = Coordinate::stringFromColumnIndex($r['end']);
+            $endLetter = Coordinate::stringFromColumnIndex($r['end']);
             $range = "{$startLetter}1:{$endLetter}{$lastDataRow}";
 
             $sheet->getStyle($range)->getFill()->setFillType(Fill::FILL_SOLID);
@@ -451,7 +476,8 @@ class CameraReportController extends Controller
         // entity widths (count visible entity cols)
         $col = 2;
         $totalEntityCols = 0;
-        foreach ($categoryGroups as $g) $totalEntityCols += count($g['entities']);
+        foreach ($categoryGroups as $g)
+            $totalEntityCols += count($g['entities']);
 
         for ($i = 0; $i < $totalEntityCols; $i++) {
             $sheet->getColumnDimension(Coordinate::stringFromColumnIndex($col))->setWidth(18);
@@ -474,17 +500,17 @@ class CameraReportController extends Controller
 
     private function getReportData(Request $request, $user): array
     {
-        $storeId    = $request->input('store_id');
-        $group      = $request->input('group');
+        $storeId = $request->input('store_id');
+        $group = $request->input('group');
         $reportType = $request->input('report_type');
-        $dateFrom   = $request->input('date_from');
-        $dateTo     = $request->input('date_to');
-        $ratingId   = $request->input('rating_id');
-
+        $dateFrom = $request->input('date_from');
+        $dateTo = $request->input('date_to');
+        $ratingId = $request->input('rating_id');
+        $categoryIds = $request->input('category_ids');
         $ratingId = ($ratingId !== null && $ratingId !== '') ? (int) $ratingId : null;
 
         $allowedStoreIds = $user->allowedStoreIdsCached();
-
+        $categoryIds = is_array($categoryIds) ? array_filter($categoryIds) : [];
         /**
          * 1) Base query for ratings/scoring rows (NO notes join to avoid duplication)
          */
@@ -507,10 +533,15 @@ class CameraReportController extends Controller
             ->whereIn('stores.id', $allowedStoreIds)
             ->when($storeId, fn($q) => $q->where('stores.id', $storeId))
             ->when($group, fn($q) => $q->where('stores.group', $group))
-            ->when($reportType, fn($q) => $q->where('entities.report_type', $reportType));
+            ->when($reportType, fn($q) => $q->where('entities.report_type', $reportType))
+            ->when(!empty($categoryIds), function ($q) use ($categoryIds) {
+                $q->whereIn('entities.category_id', $categoryIds);
+            });
 
-        if ($dateFrom) $cameraFormsBase->where('audits.date', '>=', $dateFrom);
-        if ($dateTo)   $cameraFormsBase->where('audits.date', '<=', $dateTo);
+        if ($dateFrom)
+            $cameraFormsBase->where('audits.date', '>=', $dateFrom);
+        if ($dateTo)
+            $cameraFormsBase->where('audits.date', '<=', $dateTo);
 
         /**
          * Rating filter behavior:
@@ -535,12 +566,14 @@ class CameraReportController extends Controller
          * 2) Entities list (for frontend)
          */
         $entitiesQuery = Entity::with('category');
+        if (!empty($categoryIds)) {
+            $entitiesQuery->whereIn('category_id', $categoryIds);
+        }
         if ($reportType) {
             $entitiesQuery->where('report_type', $reportType);
         }
         $entities = $entitiesQuery
-            ->orderBy('category_id')
-            ->orderBy('entity_label')
+            ->orderBy('sort_order')
             ->get();
 
         /**
@@ -548,8 +581,10 @@ class CameraReportController extends Controller
          */
         $storesQuery = Store::query()->whereIn('id', $allowedStoreIds);
 
-        if ($storeId) $storesQuery->where('id', $storeId);
-        if ($group)   $storesQuery->where('group', $group);
+        if ($storeId)
+            $storesQuery->where('id', $storeId);
+        if ($group)
+            $storesQuery->where('group', $group);
 
         if ($ratingId !== null) {
             $storesQuery->whereIn('id', $eligibleStoreIds ?: [-1]);
@@ -574,10 +609,13 @@ class CameraReportController extends Controller
             ->whereIn('stores.id', $allowedStoreIds)
             ->when($storeId, fn($q) => $q->where('stores.id', $storeId))
             ->when($group, fn($q) => $q->where('stores.group', $group))
-            ->when($reportType, fn($q) => $q->where('entities.report_type', $reportType));
+            ->when($reportType, fn($q) => $q->where('entities.report_type', $reportType))
+            ->when(!empty($categoryIds), fn($q) => $q->whereIn('entities.category_id', $categoryIds));
 
-        if ($dateFrom) $notesBase->where('audits.date', '>=', $dateFrom);
-        if ($dateTo)   $notesBase->where('audits.date', '<=', $dateTo);
+        if ($dateFrom)
+            $notesBase->where('audits.date', '>=', $dateFrom);
+        if ($dateTo)
+            $notesBase->where('audits.date', '<=', $dateTo);
 
         if ($ratingId !== null) {
             $notesBase->whereIn('stores.id', $eligibleStoreIds ?: [-1]);
@@ -627,11 +665,11 @@ class CameraReportController extends Controller
                 }
 
                 $entitiesSummary[$entity->id] = [
-                    'entity_id'     => $entity->id,
-                    'entity_label'  => $entity->entity_label,
+                    'entity_id' => $entity->id,
+                    'entity_label' => $entity->entity_label,
                     'rating_counts' => $ratingCounts,
-                    'notes'         => $notesByStoreEntity[$sid][$entity->id] ?? [],
-                    'category'      => $entity->category ? $entity->category->toArray() : null,
+                    'notes' => $notesByStoreEntity[$sid][$entity->id] ?? [],
+                    'category' => $entity->category ? $entity->category->toArray() : null,
                 ];
             }
 
@@ -647,8 +685,10 @@ class CameraReportController extends Controller
 
                     foreach ($formsForDate as $form) {
                         $label = strtolower($form->rating_label ?? '');
-                        if ($label === 'pass') $pass++;
-                        if ($label === 'fail') $fail++;
+                        if ($label === 'pass')
+                            $pass++;
+                        if ($label === 'fail')
+                            $fail++;
                     }
 
                     $denom = $pass + $fail;
@@ -683,35 +723,36 @@ class CameraReportController extends Controller
 
             $scoreData[(string) $sid] = [
                 'score_without_auto_fail' => $finalScoreWithoutAuto,
-                'score_with_auto_fail'    => $finalScoreWithAuto,
+                'score_with_auto_fail' => $finalScoreWithAuto,
             ];
 
             $summary[] = [
-                'store_id'    => $sid,
-                'store_name'  => $store->store,
+                'store_id' => $sid,
+                'store_name' => $store->store,
                 'store_group' => $store->group,
-                'entities'    => $entitiesSummary,
+                'entities' => $entitiesSummary,
             ];
         }
 
         return [
-            'summary'      => $summary,
-            'entities'     => $entities,
+            'summary' => $summary,
+            'entities' => $entities,
             'total_stores' => count($summary),
-            'scoreData'    => $scoreData,
+            'scoreData' => $scoreData,
         ];
     }
 
     private function getReportAttachments(Request $request, $user)
     {
-        $storeId    = $request->input('store_id');
-        $group      = $request->input('group');
+        $storeId = $request->input('store_id');
+        $group = $request->input('group');
         $reportType = $request->input('report_type');
-        $dateFrom   = $request->input('date_from');
-        $dateTo     = $request->input('date_to');
-        $ratingId   = $request->input('rating_id');
+        $dateFrom = $request->input('date_from');
+        $dateTo = $request->input('date_to');
+        $ratingId = $request->input('rating_id');
         $ratingId = ($ratingId !== null && $ratingId !== '') ? (int) $ratingId : null;
-
+        $categoryIds = $request->input('category_ids');
+        $categoryIds = is_array($categoryIds) ? array_filter($categoryIds) : [];
         $allowedStoreIds = $user->allowedStoreIdsCached();
 
         $q = DB::table('camera_form_note_attachments as a')
@@ -731,10 +772,13 @@ class CameraReportController extends Controller
             ->whereIn('stores.id', $allowedStoreIds)
             ->when($storeId, fn($qq) => $qq->where('stores.id', $storeId))
             ->when($group, fn($qq) => $qq->where('stores.group', $group))
-            ->when($reportType, fn($qq) => $qq->where('entities.report_type', $reportType));
+            ->when($reportType, fn($qq) => $qq->where('entities.report_type', $reportType))
+            ->when(!empty($categoryIds), fn($qq) => $qq->whereIn('entities.category_id', $categoryIds));
 
-        if ($dateFrom) $q->where('audits.date', '>=', $dateFrom);
-        if ($dateTo)   $q->where('audits.date', '<=', $dateTo);
+        if ($dateFrom)
+            $q->where('audits.date', '>=', $dateFrom);
+        if ($dateTo)
+            $q->where('audits.date', '<=', $dateTo);
 
         if ($ratingId !== null) {
             $eligibleStoreIds = (clone $q)
