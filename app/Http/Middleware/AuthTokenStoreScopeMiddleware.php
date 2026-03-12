@@ -143,15 +143,33 @@ class AuthTokenStoreScopeMiddleware
             $body = (array) ($request->except(['entities', 'file', 'files']) ?? []);
         }
 
-        $headers = [
-            'X-Store-Id' => $request->header('X-Store-Id'),
+        // Add any request headers you want authz to inspect here
+        $headerKeys = [
+            'X-Store-Id',
+            'X-Store-Ids',
+            'X-StoreId',
+            'X-StoreIds',
+            'store_id',
+            'store_ids',
+            'storeId',
+            'storeIds',
+            'store',
         ];
+
+        $headers = [];
+        foreach ($headerKeys as $key) {
+            $value = $request->header($key);
+
+            if ($value !== null && $value !== '') {
+                $headers[$key] = $value;
+            }
+        }
 
         $ctx = [
             'path' => $path,
             'query' => $query,
             'body' => $body,
-            'header' => $headers
+            'header' => $headers,
         ];
 
         $this->ksortRecursive($ctx);
