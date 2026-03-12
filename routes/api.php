@@ -15,8 +15,8 @@ Route::middleware([
 
     Route::get('/audits/ratings-summary/{store_id}/{date_start}/{date_end}', [AuditController::class, 'ratingsSummary']);
 
-    Route::apiResource('camera-forms', CameraFormController::class);
-
+    Route::apiResource('camera-forms', CameraFormController::class)->except('update');
+    Route::post('camera-forms/{camera_form}', [CameraFormController::class, 'update'])->name('camera-forms.update');
     Route::get('camera-reports', [CameraReportController::class, 'index']);
     Route::get('camera-reports/export', [CameraReportController::class, 'export']);
     // ================================= export functions ==============================
