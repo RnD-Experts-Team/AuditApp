@@ -75,6 +75,7 @@ class CameraReportController extends Controller
                 'date_to',
                 'rating_id',
                 'category_ids' // ADD
+                'date_range_type', // ADD
             ]),
         ]);
     }
@@ -508,6 +509,7 @@ class CameraReportController extends Controller
         $ratingId = $request->input('rating_id');
         $categoryIds = $request->input('category_ids');
         $ratingId = ($ratingId !== null && $ratingId !== '') ? (int) $ratingId : null;
+        $dateRangeType = $request->input('date_range_type'); // 'weekly', 'daily', or null
 
         $allowedStoreIds = $user->allowedStoreIdsCached();
         $categoryIds = is_array($categoryIds) ? array_filter($categoryIds) : [];
@@ -536,7 +538,14 @@ class CameraReportController extends Controller
             ->when($reportType, fn($q) => $q->where('entities.report_type', $reportType))
             ->when(!empty($categoryIds), function ($q) use ($categoryIds) {
                 $q->whereIn('entities.category_id', $categoryIds);
-            });
+            })
+            ->when($dateRangeType !== null && $dateRangeType !== '', function ($q) use ($dateRangeType) {
+    if ($dateRangeType === 'null') {
+        $q->whereNull('entities.date_range_type');
+    } else {
+        $q->where('entities.date_range_type', $dateRangeType);
+    }
+});
 
         if ($dateFrom)
             $cameraFormsBase->where('audits.date', '>=', $dateFrom);
@@ -572,6 +581,13 @@ class CameraReportController extends Controller
         if ($reportType) {
             $entitiesQuery->where('report_type', $reportType);
         }
+        if ($dateRangeType !== null && $dateRangeType !== '') {
+    if ($dateRangeType === 'null') {
+        $entitiesQuery->whereNull('date_range_type');
+    } else {
+        $entitiesQuery->where('date_range_type', $dateRangeType);
+    }
+}
         $entities = $entitiesQuery
             ->orderBy('sort_order')
             ->get();
@@ -610,7 +626,13 @@ class CameraReportController extends Controller
             ->when($storeId, fn($q) => $q->where('stores.id', $storeId))
             ->when($group, fn($q) => $q->where('stores.group', $group))
             ->when($reportType, fn($q) => $q->where('entities.report_type', $reportType))
-            ->when(!empty($categoryIds), fn($q) => $q->whereIn('entities.category_id', $categoryIds));
+            ->when(!empty($categoryIds), fn($q) => $q->whereIn('entities.category_id', $categoryIds))->when($dateRangeType !== null && $dateRangeType !== '', function ($q) use ($dateRangeType) {
+    if ($dateRangeType === 'null') {
+        $q->whereNull('entities.date_range_type');
+    } else {
+        $q->where('entities.date_range_type', $dateRangeType);
+    }
+});
 
         if ($dateFrom)
             $notesBase->where('audits.date', '>=', $dateFrom);
@@ -754,7 +776,7 @@ class CameraReportController extends Controller
         $categoryIds = $request->input('category_ids');
         $categoryIds = is_array($categoryIds) ? array_filter($categoryIds) : [];
         $allowedStoreIds = $user->allowedStoreIdsCached();
-
+$dateRangeType = $request->input('date_range_type');
         $q = DB::table('camera_form_note_attachments as a')
             ->join('camera_form_notes as n', 'n.id', '=', 'a.camera_form_note_id')
             ->join('camera_forms as cf', 'cf.id', '=', 'n.camera_form_id')
@@ -773,7 +795,13 @@ class CameraReportController extends Controller
             ->when($storeId, fn($qq) => $qq->where('stores.id', $storeId))
             ->when($group, fn($qq) => $qq->where('stores.group', $group))
             ->when($reportType, fn($qq) => $qq->where('entities.report_type', $reportType))
-            ->when(!empty($categoryIds), fn($qq) => $qq->whereIn('entities.category_id', $categoryIds));
+            ->when(!empty($categoryIds), fn($qq) => $qq->whereIn('entities.category_id', $categoryIds))->when($dateRangeType !== null && $dateRangeType !== '', function ($q) use ($dateRangeType) {
+    if ($dateRangeType === 'null') {
+        $q->whereNull('entities.date_range_type');
+    } else {
+        $q->where('entities.date_range_type', $dateRangeType);
+    }
+});
 
         if ($dateFrom)
             $q->where('audits.date', '>=', $dateFrom);
