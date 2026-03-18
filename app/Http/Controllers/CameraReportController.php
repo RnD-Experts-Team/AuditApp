@@ -541,7 +541,6 @@ class CameraReportController extends Controller
             })
             ->when($dateRangeType !== null && $dateRangeType !== '', function ($q) use ($dateRangeType) {
                 if ($dateRangeType === 'null') {
-                    $q->whereNull('entities.date_range_type');
                 } else {
                     $q->where('entities.date_range_type', $dateRangeType);
                 }
@@ -583,7 +582,6 @@ class CameraReportController extends Controller
         }
         if ($dateRangeType !== null && $dateRangeType !== '') {
             if ($dateRangeType === 'null') {
-                $entitiesQuery->whereNull('date_range_type');
             } else {
                 $entitiesQuery->where('date_range_type', $dateRangeType);
             }
@@ -628,7 +626,6 @@ class CameraReportController extends Controller
             ->when($reportType, fn($q) => $q->where('entities.report_type', $reportType))
             ->when(!empty($categoryIds), fn($q) => $q->whereIn('entities.category_id', $categoryIds))->when($dateRangeType !== null && $dateRangeType !== '', function ($q) use ($dateRangeType) {
                 if ($dateRangeType === 'null') {
-                    $q->whereNull('entities.date_range_type');
                 } else {
                     $q->where('entities.date_range_type', $dateRangeType);
                 }
@@ -797,7 +794,6 @@ class CameraReportController extends Controller
             ->when($reportType, fn($qq) => $qq->where('entities.report_type', $reportType))
             ->when(!empty($categoryIds), fn($qq) => $qq->whereIn('entities.category_id', $categoryIds))->when($dateRangeType !== null && $dateRangeType !== '', function ($q) use ($dateRangeType) {
                 if ($dateRangeType === 'null') {
-                    $q->whereNull('entities.date_range_type');
                 } else {
                     $q->where('entities.date_range_type', $dateRangeType);
                 }
