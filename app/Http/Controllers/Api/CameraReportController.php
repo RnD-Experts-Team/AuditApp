@@ -670,7 +670,10 @@ class CameraReportController extends Controller
         /**
          * 2) Entities list (for frontend)
          */
-        $entitiesQuery = Entity::with('category');
+        $entitiesQuery = Entity::with('category')
+            ->when(!empty($categoryIds), function ($q) use ($categoryIds) {
+                $q->whereIn('category_id', $categoryIds);
+            });
 
         // update here
         // ======================
