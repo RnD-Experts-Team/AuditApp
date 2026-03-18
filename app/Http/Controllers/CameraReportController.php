@@ -538,18 +538,14 @@ class CameraReportController extends Controller
             ->when($reportType, fn($q) => $q->where('entities.report_type', $reportType))
             ->when(!empty($categoryIds), function ($q) use ($categoryIds) {
                 $q->whereIn('entities.category_id', $categoryIds);
-            })
-            ->when($dateRangeType !== null && $dateRangeType !== '', function ($q) use ($dateRangeType) {
-                if ($dateRangeType === 'null') {
-                } else {
-                    $q->where('entities.date_range_type', $dateRangeType);
-                }
             });
 
         if ($dateFrom)
             $cameraFormsBase->where('audits.date', '>=', $dateFrom);
         if ($dateTo)
             $cameraFormsBase->where('audits.date', '<=', $dateTo);
+
+        $this->applyDateRangeTypeFilter($cameraFormsBase, $dateRangeType);
 
         /**
          * Rating filter behavior:
@@ -580,11 +576,8 @@ class CameraReportController extends Controller
         if ($reportType) {
             $entitiesQuery->where('report_type', $reportType);
         }
-        if ($dateRangeType !== null && $dateRangeType !== '') {
-            if ($dateRangeType === 'null') {
-            } else {
-                $entitiesQuery->where('date_range_type', $dateRangeType);
-            }
+        if (in_array($dateRangeType, ['daily', 'weekly'], true)) {
+            $entitiesQuery->where('date_range_type', $dateRangeType);
         }
         $entities = $entitiesQuery
             ->orderBy('sort_order')
@@ -624,12 +617,9 @@ class CameraReportController extends Controller
             ->when($storeId, fn($q) => $q->where('stores.id', $storeId))
             ->when($group, fn($q) => $q->where('stores.group', $group))
             ->when($reportType, fn($q) => $q->where('entities.report_type', $reportType))
-            ->when(!empty($categoryIds), fn($q) => $q->whereIn('entities.category_id', $categoryIds))->when($dateRangeType !== null && $dateRangeType !== '', function ($q) use ($dateRangeType) {
-                if ($dateRangeType === 'null') {
-                } else {
-                    $q->where('entities.date_range_type', $dateRangeType);
-                }
-            });
+            ->when(!empty($categoryIds), fn($q) => $q->whereIn('entities.category_id', $categoryIds));
+
+        $this->applyDateRangeTypeFilter($notesBase, $dateRangeType);
 
         if ($dateFrom)
             $notesBase->where('audits.date', '>=', $dateFrom);
@@ -792,12 +782,9 @@ class CameraReportController extends Controller
             ->when($storeId, fn($qq) => $qq->where('stores.id', $storeId))
             ->when($group, fn($qq) => $qq->where('stores.group', $group))
             ->when($reportType, fn($qq) => $qq->where('entities.report_type', $reportType))
-            ->when(!empty($categoryIds), fn($qq) => $qq->whereIn('entities.category_id', $categoryIds))->when($dateRangeType !== null && $dateRangeType !== '', function ($q) use ($dateRangeType) {
-                if ($dateRangeType === 'null') {
-                } else {
-                    $q->where('entities.date_range_type', $dateRangeType);
-                }
-            });
+            ->when(!empty($categoryIds), fn($qq) => $qq->whereIn('entities.category_id', $categoryIds));
+
+        $this->applyDateRangeTypeFilter($q, $dateRangeType);
 
         if ($dateFrom)
             $q->where('audits.date', '>=', $dateFrom);
@@ -816,5 +803,14 @@ class CameraReportController extends Controller
         }
 
         return $q->get();
+    }
+
+    private function applyDateRangeTypeFilter($query, $dateRangeType)
+    {
+        if (in_array($dateRangeType, ['daily', 'weekly'], true)) {
+            $query->where('entities.date_range_type', $dateRangeType);
+        }
+
+        return $query;
     }
 }
