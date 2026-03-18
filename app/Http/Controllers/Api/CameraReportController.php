@@ -20,6 +20,7 @@ use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use ZipArchive;
+use App\Models\Category;
 
 class CameraReportController extends Controller
 {
@@ -62,11 +63,15 @@ class CameraReportController extends Controller
 
         $reportData = $this->getReportData($request, $user);
 
+        $categories = Category::select('id', 'label')
+            ->orderBy('sort_order')
+            ->get();
         return $this->success('Camera report generated', [
             'report' => $reportData,
             'stores' => $stores,
             'groups' => $groups,
             'ratings' => $ratings,
+            'categories' => $categories,
             'custom_reports' => CustomReport::select('id', 'name')->orderBy('name')->get(),
             'filters' => $request->only([
                 'store_id',
@@ -75,6 +80,8 @@ class CameraReportController extends Controller
                 'date_from',
                 'date_to',
                 'rating_id',
+                'category_ids', // ADD
+                'date_range_type',
             ]),
         ]);
     }
@@ -98,7 +105,8 @@ class CameraReportController extends Controller
 
         $visibleEntities = $this->computeVisibleEntities($entities, $summary);
         $categoryGroups = $this->computeCategoryGroups($visibleEntities);
-
+        $categoryIds = $request->input('category_ids', []);
+        $dateRangeType = $request->input('date_range_type', '');
         $timestamp = now()->format('Y-m-d');
         $baseName = 'camera-report_' . $timestamp;
 
@@ -581,10 +589,13 @@ class CameraReportController extends Controller
         $dateTo = $request->input('date_to');
         $ratingId = $request->input('rating_id');
         $customReportId = $request->input('custom_report_id');
-
+        $dateRangeType = $request->input('date_range_type');
         $ratingId = ($ratingId !== null && $ratingId !== '') ? (int) $ratingId : null;
+        $dateRangeType = $request->input('date_range_type'); // 'weekly', 'daily', or null
+        $categoryIds = $request->input('category_ids');
 
         $allowedStoreIds = $user->allowedStoreIdsCached();
+        $categoryIds = is_array($categoryIds) ? array_filter($categoryIds) : [];
 
         /**
          * 1) Base query for ratings/scoring rows (NO notes join to avoid duplication)
@@ -608,8 +619,12 @@ class CameraReportController extends Controller
             ->whereIn('stores.id', $allowedStoreIds)
             ->when($storeId, fn($q) => $q->where('stores.id', $storeId))
             ->when($group, fn($q) => $q->where('stores.group', $group))
-            ->when($reportType, fn($q) => $q->where('entities.report_type', $reportType));
+            ->when($reportType, fn($q) => $q->where('entities.report_type', $reportType))
+            ->when(!empty($categoryIds), function ($q) use ($categoryIds) {
+                $q->whereIn('entities.category_id', $categoryIds);
+            });
 
+        $this->applyDateRangeTypeFilter($cameraFormsBase, $dateRangeType);
         if ($dateFrom) {
             $cameraFormsBase->where('audits.date', '>=', $dateFrom);
         }
@@ -670,6 +685,9 @@ class CameraReportController extends Controller
         if ($reportType) {
             $entitiesQuery->where('report_type', $reportType);
         }
+        if (in_array($dateRangeType, ['daily', 'weekly'], true)) {
+            $entitiesQuery->where('date_range_type', $dateRangeType);
+        }
         $entities = $entitiesQuery
             ->orderBy('category_id')
             ->orderBy('entity_label')
@@ -710,8 +728,10 @@ class CameraReportController extends Controller
             ->whereIn('stores.id', $allowedStoreIds)
             ->when($storeId, fn($q) => $q->where('stores.id', $storeId))
             ->when($group, fn($q) => $q->where('stores.group', $group))
-            ->when($reportType, fn($q) => $q->where('entities.report_type', $reportType));
+            ->when($reportType, fn($q) => $q->where('entities.report_type', $reportType))
+            ->when(!empty($categoryIds), fn($q) => $q->whereIn('entities.category_id', $categoryIds));
 
+        $this->applyDateRangeTypeFilter($notesBase, $dateRangeType);
         if ($dateFrom) {
             $notesBase->where('audits.date', '>=', $dateFrom);
         }
@@ -854,6 +874,9 @@ class CameraReportController extends Controller
         $dateTo = $request->input('date_to');
         $ratingId = $request->input('rating_id');
         $ratingId = ($ratingId !== null && $ratingId !== '') ? (int) $ratingId : null;
+        $dateRangeType = $request->input('date_range_type');
+        $categoryIds = $request->input('category_ids');
+        $categoryIds = is_array($categoryIds) ? array_filter($categoryIds) : [];
         // update here
         $customReportId = $request->input('custom_report_id');
 
@@ -876,8 +899,9 @@ class CameraReportController extends Controller
             ->whereIn('stores.id', $allowedStoreIds)
             ->when($storeId, fn($qq) => $qq->where('stores.id', $storeId))
             ->when($group, fn($qq) => $qq->where('stores.group', $group))
-            ->when($reportType, fn($qq) => $qq->where('entities.report_type', $reportType));
-
+            ->when($reportType, fn($qq) => $qq->where('entities.report_type', $reportType))
+            ->when(!empty($categoryIds), fn($qq) => $qq->whereIn('entities.category_id', $categoryIds));
+        $this->applyDateRangeTypeFilter($q, $dateRangeType);
         if ($dateFrom) {
             $q->where('audits.date', '>=', $dateFrom);
         }
@@ -910,5 +934,14 @@ class CameraReportController extends Controller
         }
 
         return $q->get();
+    }
+
+    private function applyDateRangeTypeFilter($query, $dateRangeType)
+    {
+        if (in_array($dateRangeType, ['daily', 'weekly'], true)) {
+            $query->where('entities.date_range_type', $dateRangeType);
+        }
+
+        return $query;
     }
 }

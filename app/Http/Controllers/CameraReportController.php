@@ -108,6 +108,7 @@ class CameraReportController extends Controller
         $dateTo = (string) $request->input('date_to', '');
         $ratingId = (string) $request->input('rating_id', '');
         $categoryIds = $request->input('category_ids', []);
+        $dateRangeType = $request->input('date_range_type', '');
         $timestamp = now()->format('Y-m-d');
 
         $parts = [];
