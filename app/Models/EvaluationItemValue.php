@@ -12,7 +12,12 @@ class EvaluationItemValue extends Model
         'evaluation_id',
         'inspection_item_id',
         'value',
+        'weight',
         'note',
+    ];
+
+    protected $casts = [
+        'weight' => 'integer',
     ];
 
     public function evaluation(): BelongsTo

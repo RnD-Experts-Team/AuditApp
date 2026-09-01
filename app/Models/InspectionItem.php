@@ -11,6 +11,7 @@ class InspectionItem extends Model
 
     protected $fillable = [
         'name',
+        'weight',
         'sort_order',
         'active',
     ];
@@ -18,5 +19,6 @@ class InspectionItem extends Model
     protected $casts = [
         'active'     => 'boolean',
         'sort_order' => 'integer',
+        'weight'     => 'integer',
     ];
 }

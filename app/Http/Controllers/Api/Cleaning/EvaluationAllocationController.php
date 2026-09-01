@@ -1,0 +1,196 @@
+<?php
+
+namespace App\Http\Controllers\Api\Cleaning;
+
+use App\Http\Controllers\Controller;
+use App\Models\CleaningWeightAllocation;
+use App\Models\Evaluation;
+use App\Services\Cleaning\EvaluationService;
+use App\Services\Cleaning\PeriodKeyService;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
+
+/**
+ * Hands an absent task's weight to the tasks that ARE in play for a period.
+ *
+ * ── Worth knowing before using this ──
+ * Splitting the weight PROPORTIONALLY changes nothing. The score is
+ * earned/total; scaling every weight by the same factor cancels out:
+ *
+ *     (k·earned) / (k·total)  ==  earned / total
+ *
+ * So an "even split" button would compute for a second and move no number, and
+ * doing nothing at all gives the same percentage as a perfect pro-rata split.
+ * The feature is only meaningful when the auditor allocates UNEVENLY — putting
+ * the absent weight on the tasks that matter most that week. That is exactly
+ * what was asked for; it just means the default path can stay empty.
+ */
+class EvaluationAllocationController extends Controller
+{
+    public function __construct(
+        private readonly EvaluationService $evaluations,
+        private readonly PeriodKeyService $periods,
+    ) {
+    }
+
+    /**
+     * Current allocations plus the pool still waiting to be allocated.
+     */
+    public function index(Request $request): JsonResponse
+    {
+        $data = $request->validate(array_merge(PeriodKeyService::validationRules(), [
+            'store_id' => ['required', 'integer', 'exists:stores,id'],
+        ]));
+
+        $this->assertCanAccess($request, (int) $data['store_id']);
+        $periodType = $data['period_type'] ?? 'week';
+
+        $row = $this->evaluations
+            ->buildGrid($periodType, $data['period_key'], [(int) $data['store_id']])['rows']
+            ->first();
+
+        return response()->json([
+            'period'       => $this->periods->describe($periodType, $data['period_key']),
+            'absent_tasks' => $row['absent_tasks'] ?? [],
+            'allocations'  => $row['allocations'] ?? [],
+        ]);
+    }
+
+    /**
+     * Replace the whole split for ONE source task, in one transaction.
+     *
+     * Partial splits are rejected: half-allocated weight is a silently wrong
+     * report, which is worse than no allocation at all.
+     */
+    public function store(Request $request): JsonResponse
+    {
+        $data = $request->validate(array_merge(PeriodKeyService::validationRules(), [
+            'store_id'                      => ['required', 'integer', 'exists:stores,id'],
+            'source_task_id'                => ['required', 'integer', 'exists:cleaning_tasks,id'],
+            'allocations'                   => ['required', 'array', 'min:1'],
+            'allocations.*.target_task_id'  => ['required', 'integer', 'exists:cleaning_tasks,id'],
+            'allocations.*.amount'          => ['required', 'integer', 'min:1'],
+        ]));
+
+        $storeId    = (int) $data['store_id'];
+        $periodType = $data['period_type'] ?? 'week';
+        $periodKey  = $data['period_key'];
+
+        $this->assertCanAccess($request, $storeId);
+        $this->assertNotFinalized($storeId, $periodType, $periodKey);
+
+        $row    = $this->evaluations->buildGrid($periodType, $periodKey, [$storeId])['rows']->first();
+        $source = collect($row['absent_tasks'] ?? [])->firstWhere('task_id', (int) $data['source_task_id']);
+
+        if (!$source) {
+            throw ValidationException::withMessages([
+                'source_task_id' => ['That task is not absent this period, so it has no weight to give away.'],
+            ]);
+        }
+
+        // Targets must be tasks actually in play, or the weight would vanish.
+        $presentIds = collect($row['chart'] ?? [])->flatten(1)->pluck('task_id')->map(fn ($v) => (int) $v)->all();
+
+        $total = 0;
+        foreach ($data['allocations'] as $i => $allocation) {
+            $targetId = (int) $allocation['target_task_id'];
+
+            if ($targetId === (int) $data['source_task_id']) {
+                throw ValidationException::withMessages([
+                    "allocations.{$i}.target_task_id" => ['A task cannot receive its own weight.'],
+                ]);
+            }
+
+            if (!in_array($targetId, $presentIds, true)) {
+                throw ValidationException::withMessages([
+                    "allocations.{$i}.target_task_id" => ['That task is not gradable this period, so it cannot receive weight.'],
+                ]);
+            }
+
+            $total += (int) $allocation['amount'];
+        }
+
+        $sourceWeight = (int) $source['weight'];
+        if ($total !== $sourceWeight) {
+            throw ValidationException::withMessages([
+                'allocations' => ["The split must add up to exactly {$sourceWeight} (got {$total})."],
+            ]);
+        }
+
+        DB::transaction(function () use ($data, $storeId, $periodType, $periodKey) {
+            CleaningWeightAllocation::where('store_id', $storeId)
+                ->where('period_type', $periodType)
+                ->where('period_key', $periodKey)
+                ->where('source_task_id', $data['source_task_id'])
+                ->delete();
+
+            foreach ($data['allocations'] as $allocation) {
+                CleaningWeightAllocation::create([
+                    'store_id'       => $storeId,
+                    'period_type'    => $periodType,
+                    'period_key'     => $periodKey,
+                    'source_task_id' => (int) $data['source_task_id'],
+                    'target_task_id' => (int) $allocation['target_task_id'],
+                    'amount'         => (int) $allocation['amount'],
+                    'created_by'     => Auth::id(),
+                ]);
+            }
+        });
+
+        return response()->json([
+            'data' => $this->evaluations->buildGrid($periodType, $periodKey, [$storeId])['rows']->first(),
+        ]);
+    }
+
+    /**
+     * Drop one source's split — back to plain renormalisation, which scores
+     * identically to an even split anyway.
+     */
+    public function destroy(Request $request): JsonResponse
+    {
+        $data = $request->validate(array_merge(PeriodKeyService::validationRules(), [
+            'store_id'       => ['required', 'integer', 'exists:stores,id'],
+            'source_task_id' => ['required', 'integer', 'exists:cleaning_tasks,id'],
+        ]));
+
+        $storeId    = (int) $data['store_id'];
+        $periodType = $data['period_type'] ?? 'week';
+
+        $this->assertCanAccess($request, $storeId);
+        $this->assertNotFinalized($storeId, $periodType, $data['period_key']);
+
+        CleaningWeightAllocation::where('store_id', $storeId)
+            ->where('period_type', $periodType)
+            ->where('period_key', $data['period_key'])
+            ->where('source_task_id', $data['source_task_id'])
+            ->delete();
+
+        return response()->json([
+            'data' => $this->evaluations->buildGrid($periodType, $data['period_key'], [$storeId])['rows']->first(),
+        ]);
+    }
+
+    // ── helpers ──
+
+    private function assertNotFinalized(int $storeId, string $periodType, string $periodKey): void
+    {
+        $finalized = Evaluation::where('store_id', $storeId)
+            ->where('period_type', $periodType)
+            ->where('period_key', $periodKey)
+            ->whereNotNull('finalized_at')
+            ->exists();
+
+        abort_if($finalized, 409, 'This evaluation is finalized.');
+    }
+
+    private function assertCanAccess(Request $request, int $storeId): void
+    {
+        $user = $request->user();
+        if ($user && !$user->canAccessStoreId($storeId)) {
+            abort(403, 'You cannot access this store.');
+        }
+    }
+}
