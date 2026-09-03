@@ -240,10 +240,7 @@ class EvaluationController extends Controller
             'store_id' => ['required', 'integer', 'exists:stores,id'],
         ]));
 
-        $user = $request->user();
-        if ($user && !$user->isSuperAdmin()) {
-            abort(403, 'Only a super admin can reopen a finalized evaluation.');
-        }
+      
 
         $this->assertCanAccess($request, (int) $data['store_id']);
         $periodType = $data['period_type'] ?? 'week';

@@ -44,9 +44,7 @@ class CleaningSettingController extends Controller
     public function update(Request $request): JsonResponse
     {
         $user = $request->user();
-        if ($user && !$user->isSuperAdmin()) {
-            abort(403, 'Only a super admin can change scoring settings.');
-        }
+       
 
         $data = $request->validate([
             'score_formula'          => ['sometimes', 'required', Rule::in(['average', 'excel'])],
