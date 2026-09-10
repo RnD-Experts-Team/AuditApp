@@ -30,6 +30,23 @@ class CleaningSetting extends Model
         // How the two sides split the final score. Must add up to 100.
         'items_share' => '50',
         'chart_share' => '50',
+
+        // ── "the auditor cannot pass a task the store never marked complete" ──
+        //
+        // Master switch. 'false' restores the old behaviour exactly, in one row,
+        // with no deploy — which is the point: if a client's stores turn out to
+        // log far less reliably than they believe, the rule can be lifted while
+        // we talk to them instead of under deploy pressure.
+        'chart_requires_completion' => 'true',
+
+        // What counts as "done" when a task is due several times in one report
+        // period. A daily task is due seven times inside one week:
+        //
+        //   all        every occurrence logged           (7 of 7)
+        //   any        at least one logged               (1 of 7 is enough)
+        //   threshold  at least completion_threshold %   (e.g. 80 → 6 of 7)
+        'completion_rule'      => 'all',
+        'completion_threshold' => '100',
     ];
 
     /** @var array<string,string>|null */

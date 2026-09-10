@@ -14,12 +14,25 @@ class EvaluationChartVerdict extends Model
         'frequency',
         'weight',
         'verdict',
+        'source',
         'note',
     ];
 
     protected $casts = [
         'weight' => 'integer',
     ];
+
+    /**
+     * Was this fail decided by the system (the store never marked the task
+     * complete) rather than by a person who looked at the work?
+     *
+     * A null `source` means "auditor": every row written before the column
+     * existed was entered by hand, and nothing else can write a null now.
+     */
+    public function isSystemVerdict(): bool
+    {
+        return $this->source === 'system';
+    }
 
     public function evaluation(): BelongsTo
     {

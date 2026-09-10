@@ -81,6 +81,9 @@ Route::middleware([
         // Absent-task weight allocation (auditor chooses which tasks absorb it)
         Route::get('evaluations/allocations', [EvaluationAllocationController::class, 'index'])->name('cleaning.allocations.index');
         Route::post('evaluations/allocations', [EvaluationAllocationController::class, 'store'])->name('cleaning.allocations.store');
+        // One button: the split built on one store, copied to the stores chosen.
+        // Send dry_run=true first to preview what will be written and skipped.
+        Route::post('evaluations/allocations/copy', [EvaluationAllocationController::class, 'copy'])->name('cleaning.allocations.copy');
         Route::delete('evaluations/allocations', [EvaluationAllocationController::class, 'destroy'])->name('cleaning.allocations.destroy');
 
         Route::get('inspection-items', [InspectionItemController::class, 'index'])->name('cleaning.items.index');
