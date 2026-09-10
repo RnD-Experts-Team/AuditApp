@@ -38,9 +38,24 @@ use Illuminate\Support\Collection;
  *
  * ── Coverage, not a boolean ──
  * A daily task is due seven times inside one report week, so "done" is a
- * fraction. `expected` counts the occurrences the store owed in this period,
- * `found` counts the ones it logged, and the configured rule turns that into a
- * yes/no. See CleaningSetting: completion_rule = all | any | threshold.
+ * fraction. The configured rule turns that fraction into a yes/no — see
+ * CleaningSetting: completion_rule = all | any | threshold.
+ *
+ * ── Two counts, because they answer two different questions ──
+ * `expected_period` / `found_period`  every occurrence the period contains
+ * `expected` / `found`                only those whose deadline has PASSED
+ *
+ * They drive different rules, and collapsing them into one was a real bug:
+ *
+ *   can_pass  ← the whole period. Passing a task requires a completion whether
+ *               or not the deadline has arrived: with nothing logged there is
+ *               nothing to judge, so `pass` is refused immediately.
+ *   missed    ← the ended subset only. A store still in time has not failed
+ *               anything, so it is never auto-failed mid-period.
+ *
+ * That yields three states rather than two: the store logged it (normal), it
+ * has not logged it but still has time (pass refused, nothing failed), or the
+ * deadline passed with nothing logged (pass refused AND auto-failed).
  */
 class CleaningCompletionLookup
 {
@@ -72,7 +87,8 @@ class CleaningCompletionLookup
      *                                         this store. Occurrences that fell due
      *                                         BEFORE the task was assigned were never
      *                                         the store's to do, so they are not counted.
-     * @return array<int, array{expected:int, found:int, coverage_pct:float, done:bool,
+     * @return array<int, array{expected:int, found:int, expected_period:int, found_period:int,
+     *                          coverage_pct:float, can_pass:bool, missed:bool, done:bool,
      *                          status:string, last_done_at:?string, done_by:array<int,string>,
      *                          late:bool}>
      */
@@ -83,28 +99,50 @@ class CleaningCompletionLookup
         CarbonInterface $to,
         array $assignedAt = [],
     ): array {
-        $expectedStarts = $this->expectedPeriodStarts($tasks, $from, $to, $assignedAt);
-        $completions    = $this->completionsFor($storeId, $expectedStarts);
+        $starts      = $this->expectedPeriodStarts($tasks, $from, $to, $assignedAt);
+        $completions = $this->completionsFor($storeId, $starts);
 
         $out = [];
 
         foreach ($tasks as $task) {
-            $starts = $expectedStarts[$task->id] ?? [];
-            $rows   = $completions[$task->id] ?? [];
+            $all   = $starts[$task->id]['all'] ?? [];
+            $ended = $starts[$task->id]['ended'] ?? [];
+            $rows  = $completions[$task->id] ?? [];
 
-            $matched  = array_values(array_intersect_key($rows, array_flip($starts)));
-            $expected = count($starts);
-            $found    = count($matched);
+            $matchedAll   = array_values(array_intersect_key($rows, array_flip($all)));
+            $matchedEnded = array_values(array_intersect_key($rows, array_flip($ended)));
+
+            $expectedPeriod = count($all);
+            $foundPeriod    = count($matchedAll);
+            $expectedEnded  = count($ended);
+            $foundEnded     = count($matchedEnded);
+
+            // Passing needs a completion regardless of the deadline: nothing
+            // logged means there is nothing for the auditor to judge.
+            $canPass = $expectedPeriod === 0 || $this->passesRule($expectedPeriod, $foundPeriod);
+
+            // Auto-failing needs the deadline to have passed. A store still in
+            // time has not failed anything.
+            $missed = $expectedEnded > 0 && !$this->passesRule($expectedEnded, $foundEnded);
 
             $out[$task->id] = [
-                'expected'     => $expected,
-                'found'        => $found,
-                'coverage_pct' => $expected > 0 ? round($found / $expected * 100, 1) : 100.0,
-                'done'         => $this->passesRule($expected, $found),
-                'status'       => $this->status($expected, $found),
-                'last_done_at' => $this->lastDoneAt($matched),
-                'done_by'      => $this->doneBy($matched),
-                'late'         => $this->anyLate($matched),
+                // the whole period — drives can_pass
+                'expected_period' => $expectedPeriod,
+                'found_period'    => $foundPeriod,
+                // only the occurrences whose deadline has passed — drives missed
+                'expected'        => $expectedEnded,
+                'found'           => $foundEnded,
+
+                'coverage_pct' => $expectedPeriod > 0 ? round($foundPeriod / $expectedPeriod * 100, 1) : 100.0,
+                'can_pass'     => $canPass,
+                'missed'       => $missed,
+                // Kept for readers that only want "is this settled": the store
+                // has done everything the period asks of it.
+                'done'         => $canPass,
+                'status'       => $this->status($canPass, $missed, $foundPeriod),
+                'last_done_at' => $this->lastDoneAt($matchedAll),
+                'done_by'      => $this->doneBy($matchedAll),
+                'late'         => $this->anyLate($matchedAll),
             ];
         }
 
@@ -114,30 +152,24 @@ class CleaningCompletionLookup
     // ── internals ──
 
     /**
-     * Which of the task's own periods fall due inside the report period —
-     * and are actually the store's fault yet.
+     * Which of the task's own periods fall due inside the report period, split
+     * into everything the period contains and the subset already overdue.
      *
      * Returned as unique date strings: a weekly task's rule matches several days
      * of the week but they all resolve to the SAME Tue→Mon period, and that is
      * one expected completion, not five.
      *
-     * ── Only OVERDUE occurrences count ──
-     * An occurrence is expected only once its own period has fully ended. The
-     * store cannot have failed to do something it still has time to do, and the
-     * grid is routinely opened mid-week:
+     * `ended` = the occurrence's own period has fully closed, which is the same
+     * definition of "overdue" that CleaningDueService::status() already uses.
+     * Only those can be held against the store:
      *
-     *   Thursday of an open week, daily task  →  expected 2 (Tue, Wed)
-     *   Thursday of an open week, weekly task →  expected 0 (the week is not over)
-     *   any completed past week, daily task   →  expected 7
-     *
-     * Without this the grid would auto-fail every store the moment a period
-     * opened, for days that have not happened. It is the same definition of
-     * "overdue" that CleaningDueService::status() already uses — period_end has
-     * passed and nothing was logged.
+     *   Thursday of an open week, daily task  →  all 4, ended 2 (Tue, Wed)
+     *   Thursday of an open week, weekly task →  all 1, ended 0
+     *   any completed past week, daily task   →  all 7, ended 7
      *
      * @param  Collection<int, CleaningTask>  $tasks
      * @param  array<int, mixed>  $assignedAt
-     * @return array<int, array<int, string>>  task id => period start dates
+     * @return array<int, array{all:array<int,string>, ended:array<int,string>}>
      */
     private function expectedPeriodStarts(
         Collection $tasks,
@@ -155,7 +187,8 @@ class CleaningCompletionLookup
             // passed before it existed here. Without this floor, creating a task
             // on Friday would auto-fail the store for Tuesday to Thursday.
             $floor = $this->assignedFloor($assignedAt[$task->id] ?? null);
-            $seen  = [];
+            $all   = [];
+            $ended = [];
 
             for ($d = $first->copy(); $d->lte($last); $d->addDay()) {
                 if ($floor && $d->lt($floor)) {
@@ -166,16 +199,16 @@ class CleaningCompletionLookup
                 }
 
                 [$periodStart, $periodEnd] = $this->schedule->periodBounds($task, $d);
+                $key = $periodStart->toDateString();
 
-                // Still in progress — the store has not missed it yet.
-                if ($periodEnd->copy()->endOfDay()->gte($now)) {
-                    continue;
+                $all[$key] = true;
+
+                if ($periodEnd->copy()->endOfDay()->lt($now)) {
+                    $ended[$key] = true;
                 }
-
-                $seen[$periodStart->toDateString()] = true;
             }
 
-            $out[$task->id] = array_keys($seen);
+            $out[$task->id] = ['all' => array_keys($all), 'ended' => array_keys($ended)];
         }
 
         return $out;
@@ -187,12 +220,18 @@ class CleaningCompletionLookup
      * The (task, period_start) pairs are OR'd rather than filtered by a plain
      * date range — see the class docblock for why a range is wrong.
      *
-     * @param  array<int, array<int, string>>  $expectedStarts
+     * Queried against the FULL set of period starts — the overdue subset is a
+     * subset of it, so one query serves both counts.
+     *
+     * @param  array<int, array{all:array<int,string>, ended:array<int,string>}>  $expectedStarts
      * @return array<int, array<string, CleaningCompletion>>  task id => period start => row
      */
     private function completionsFor(int $storeId, array $expectedStarts): array
     {
-        $pairs = array_filter($expectedStarts, fn ($starts) => !empty($starts));
+        $pairs = array_filter(
+            array_map(fn ($starts) => $starts['all'] ?? [], $expectedStarts),
+            fn ($starts) => !empty($starts),
+        );
 
         if (empty($pairs)) {
             return [];
@@ -239,13 +278,19 @@ class CleaningCompletionLookup
         };
     }
 
-    private function status(int $expected, int $found): string
+    /**
+     * done     the store has done everything this period asks of it
+     * pending  not yet — but the deadline has not passed, so nothing is failed
+     * partial  the deadline passed on some of it, and some was logged
+     * missing  the deadline passed and nothing was logged
+     */
+    private function status(bool $canPass, bool $missed, int $foundPeriod): string
     {
         return match (true) {
-            $expected <= 0        => 'not_owed',
-            $found <= 0           => 'missing',
-            $found >= $expected   => 'done',
-            default               => 'partial',
+            $canPass             => 'done',
+            !$missed             => 'pending',
+            $foundPeriod > 0     => 'partial',
+            default              => 'missing',
         };
     }
 

@@ -29,11 +29,19 @@ use Illuminate\Support\Collection;
  * verdict row yet, so the snapshot cannot be the scoring input.
  *
  * ── Completion gate ──
- * A chart task the store never marked complete cannot be passed. The cell is
- * locked (`evaluable = false`) and scored as a `fail` the system decided rather
- * than the auditor.
+ * A chart task the store has not marked complete is READ-ONLY to the auditor —
+ * no pass, no fail, no N/A. There is nothing to judge, so the cell comes back
+ * `evaluable = false` and the system alone decides it.
  *
- * It has to be a fail and not an empty cell, for two reasons that both bite:
+ * What the system decides depends on the deadline, and the two conditions must
+ * not be merged into one:
+ *
+ *   nothing logged, period still open  →  locked, left ungraded
+ *                                         (the store still has time)
+ *   nothing logged, period ended       →  locked AND failed, source 'system'
+ *
+ * Once late it has to be a fail rather than an empty cell, for two reasons that
+ * both bite:
  *   · `finalize` refuses while anything is ungraded, so an un-gradable cell
  *     would mean that week could never be sent to the store at all; and
  *   · ungraded cells are already OUT of the score, so a store that logged
@@ -295,31 +303,41 @@ class EvaluationService
             $verdict   = $verdictRow->verdict ?? null;
 
             $cov = $coverage[$task->id] ?? [
-                'expected' => 0, 'found' => 0, 'coverage_pct' => 100.0,
-                'done' => true, 'status' => 'not_owed',
-                'last_done_at' => null, 'done_by' => [], 'late' => false,
+                'expected' => 0, 'found' => 0, 'expected_period' => 0, 'found_period' => 0,
+                'coverage_pct' => 100.0, 'can_pass' => true, 'missed' => false, 'done' => true,
+                'status' => 'done', 'last_done_at' => null, 'done_by' => [], 'late' => false,
             ];
 
-            // Locked = the store owed occurrences this period and did not log
-            // enough of them. `expected > 0` matters: a task assigned to the
-            // store mid-period owes nothing for the days before it existed
-            // here, and must not be auto-failed for them.
-            $locked = $enforceCompletion && $cov['expected'] > 0 && !$cov['done'];
+            // ── two different rules, deliberately not one ──
+            //
+            // Locked: the store has not logged the task, so there is nothing for
+            // the auditor to judge and the cell is READ-ONLY — no pass, no fail,
+            // no N/A. This does NOT wait for the deadline.
+            //
+            // Auto-failed: the deadline has also passed. A store still in time
+            // has not failed anything, so a locked-but-not-yet-late cell simply
+            // stays ungraded rather than being marked down.
+            $locked   = $enforceCompletion && !$cov['can_pass'];
+            $autoFail = $locked && $cov['missed'];
 
-            // The auditor keeps two ways to be right about a locked task:
-            // `not_applicable` (it should not have been done at all — store
-            // closed, equipment gone) and `fail` (same answer, entered by a
-            // person). Only `pass` is taken away.
+            // On a locked cell the auditor has NO say — the API refuses every
+            // verdict, so a stored one cannot stand either. Such a row is either
+            // legacy data from before this rule, or the store's completion was
+            // undone after grading. Publishing it would show a result the system
+            // would not accept today.
+            //
+            // So a task the store did not mark complete is entirely the system's
+            // to decide: nothing while its deadline is open, `fail` once it has
+            // passed.
             $effectiveVerdict = match (true) {
-                $verdict === 'not_applicable' => 'not_applicable',
-                $locked                       => 'fail',
-                default                       => $verdict,
+                $locked => $autoFail ? 'fail' : null,
+                default => $verdict,
             };
 
             $source = match (true) {
-                $verdict !== null && $verdict !== ''                 => $verdictRow->source ?? 'auditor',
-                $effectiveVerdict === 'fail' && $locked              => 'system',
-                default                                             => null,
+                $locked                              => $autoFail ? 'system' : null,
+                $verdict !== null && $verdict !== '' => $verdictRow->source ?? 'auditor',
+                default                              => null,
             };
 
             $chart[$task->frequency][] = [
@@ -337,19 +355,29 @@ class EvaluationService
                 'historical'      => $historical,
 
                 // ── the completion gate ──
-                'completion_expected' => $cov['expected'],
-                'completion_found'    => $cov['found'],
-                'completion_pct'      => $cov['coverage_pct'],
-                'completion_status'   => $cov['status'],
-                'completion_done'     => $cov['done'],
-                'completion_late'     => $cov['late'],
-                'last_done_at'        => $cov['last_done_at'],
-                'done_by'             => $cov['done_by'],
+                // `_expected` / `_found` count the occurrences whose deadline has
+                // PASSED; `_expected_period` / `_found_period` count everything
+                // the period contains. The first pair explains an auto-fail, the
+                // second explains why Pass is refused.
+                'completion_expected'        => $cov['expected'],
+                'completion_found'           => $cov['found'],
+                'completion_expected_period' => $cov['expected_period'],
+                'completion_found_period'    => $cov['found_period'],
+                'completion_pct'             => $cov['coverage_pct'],
+                'completion_status'          => $cov['status'],
+                'completion_done'            => $cov['done'],
+                'completion_late'            => $cov['late'],
+                'last_done_at'               => $cov['last_done_at'],
+                'done_by'                    => $cov['done_by'],
                 // The two the client actually renders: disable Pass, say why.
                 'evaluable'           => !$locked,
-                'lock_reason'         => $locked
-                    ? ($cov['found'] > 0 ? 'partially_completed' : 'not_completed')
-                    : null,
+                'auto_failed'         => $autoFail,
+                'lock_reason'         => match (true) {
+                    !$locked                   => null,
+                    !$autoFail                 => 'period_not_finished',
+                    $cov['found_period'] > 0   => 'partially_completed',
+                    default                    => 'not_completed',
+                },
             ];
 
             $scoreInput[] = [

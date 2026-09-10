@@ -292,22 +292,22 @@ class EvaluationController extends Controller
     }
 
     /**
-     * The completion gate: a chart task the store never marked complete cannot
-     * be PASSED.
+     * The completion gate: a chart task the store has not marked complete is
+     * read-only. EVERY verdict is refused — pass, fail, N/A and clear alike —
+     * whether or not its deadline has arrived. With nothing logged there is
+     * nothing for the auditor to judge, so the decision is not his to make.
      *
-     * Only `pass` is refused. `fail` says the same thing a locked cell already
-     * says and records that a human looked; `not_applicable` is the auditor's
-     * way of saying the task should not have been done at all this period
-     * (store closed, equipment removed) and must stay available, or he is left
-     * with no way to be right.
+     * The task is not left blank, though: once its deadline passes the system
+     * fails it (see EvaluationService). That is what keeps `finalize` working —
+     * the cell is graded, just not by a person.
      *
      * The check reads the grid rather than the completion lookup directly, so
      * the API can never refuse something the grid shows as allowed — one source
-     * of truth, at the cost of one extra single-store grid build on `pass`.
+     * of truth, at the cost of one extra single-store grid build per write.
      */
     private function completionGateResponse(array $data, string $periodType): ?JsonResponse
     {
-        if ($data['kind'] !== 'chart' || ($data['verdict'] ?? null) !== 'pass') {
+        if ($data['kind'] !== 'chart') {
             return null;
         }
 
@@ -323,12 +323,21 @@ class EvaluationController extends Controller
             return null;
         }
 
+        // Two different situations, and telling them apart is the difference
+        // between "chase the store" and "come back after the deadline".
+        $message = $cell['lock_reason'] === 'period_not_finished'
+            ? "The store has not marked \"{$cell['name']}\" complete, so it cannot be evaluated. "
+                . 'The period is still open — the store can still do it.'
+            : "The store never marked \"{$cell['name']}\" complete for this period, so it cannot be evaluated. "
+                . 'It has already been failed automatically.';
+
         return response()->json([
-            'message' => "\"{$cell['name']}\" was not marked complete for this period, so it cannot be passed. "
-                . 'Fail it, or mark it N/A if it did not apply.',
-            'reason'              => $cell['lock_reason'],
-            'completion_expected' => $cell['completion_expected'],
-            'completion_found'    => $cell['completion_found'],
+            'message'                    => $message,
+            'reason'                     => $cell['lock_reason'],
+            'completion_expected'        => $cell['completion_expected'],
+            'completion_found'           => $cell['completion_found'],
+            'completion_expected_period' => $cell['completion_expected_period'],
+            'completion_found_period'    => $cell['completion_found_period'],
         ], 422);
     }
 

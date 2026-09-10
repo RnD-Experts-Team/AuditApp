@@ -42,10 +42,16 @@ class CleaningSetting extends Model
         // What counts as "done" when a task is due several times in one report
         // period. A daily task is due seven times inside one week:
         //
+        //   any        at least one logged               (1 of 7 is enough)  ← default
         //   all        every occurrence logged           (7 of 7)
-        //   any        at least one logged               (1 of 7 is enough)
         //   threshold  at least completion_threshold %   (e.g. 80 → 6 of 7)
-        'completion_rule'      => 'all',
+        //
+        // `any` is the default because the client's rule is simply "did the
+        // store do this task or not" — the auditor evaluates the work, not the
+        // store's logging discipline. Counting occurrences turned the grid into
+        // a "1/5" scoreboard nobody asked for. The stricter options stay
+        // available if that ever changes.
+        'completion_rule'      => 'any',
         'completion_threshold' => '100',
     ];
 
