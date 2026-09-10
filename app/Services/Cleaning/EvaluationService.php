@@ -27,6 +27,18 @@ use Illuminate\Support\Collection;
  * The `weight` column on a verdict row stays a historical snapshot only: the
  * auditor can reallocate after grading, and can allocate onto a task that has no
  * verdict row yet, so the snapshot cannot be the scoring input.
+ *
+ * ── Completion gate ──
+ * A chart task the store never marked complete cannot be passed. The cell is
+ * locked (`evaluable = false`) and scored as a `fail` the system decided rather
+ * than the auditor.
+ *
+ * It has to be a fail and not an empty cell, for two reasons that both bite:
+ *   · `finalize` refuses while anything is ungraded, so an un-gradable cell
+ *     would mean that week could never be sent to the store at all; and
+ *   · ungraded cells are already OUT of the score, so a store that logged
+ *     nothing would score better than one that did the work badly.
+ * See CleaningCompletionLookup for how "done" is measured.
  */
 class EvaluationService
 {
@@ -34,6 +46,7 @@ class EvaluationService
         private readonly CleaningScoringService $scoring,
         private readonly CleaningScheduleService $schedule,
         private readonly PeriodKeyService $periods,
+        private readonly CleaningCompletionLookup $completions,
     ) {
     }
 
@@ -61,29 +74,46 @@ class EvaluationService
             ->get()
             ->keyBy('store_id');
 
-        $tasksByStore  = $this->tasksByStore($storeIds);
-        $allocsByStore = $this->allocationsByStore($storeIds, $periodType, $periodKey);
+        $assignmentsByStore = $this->taskAssignmentsByStore($storeIds);
+        $allocsByStore      = $this->allocationsByStore($storeIds, $periodType, $periodKey);
 
         // Whether a task is due in this period does not depend on the store, so
         // evaluate the (potentially slow) schedule math once per task.
         $dueCache = [];
 
+        // Whether the store DID the task obviously does depend on the store, so
+        // this one is per row — but it costs a fixed two queries each, not one
+        // per task.
+        $enforceCompletion = $this->completions->isEnforced();
+
         $rows = $stores->map(function (Store $store) use (
-            $items, $evaluations, $tasksByStore, $allocsByStore, $from, $to, &$dueCache
+            $items, $evaluations, $assignmentsByStore, $allocsByStore, $from, $to, &$dueCache, $enforceCompletion
         ) {
-            $evaluation = $evaluations->get($store->id);
-            $allocs     = $allocsByStore->get($store->id, collect());
+            $evaluation  = $evaluations->get($store->id);
+            $allocs      = $allocsByStore->get($store->id, collect());
+            $assignments = $assignmentsByStore->get($store->id, collect());
+            $tasks       = $assignments->pluck('task');
 
             [$itemCells, $itemView] = $this->buildItemCells($items, $evaluation);
             $itemScore = $this->scoring->itemScore($itemCells);
 
+            $coverage = $this->completions->coverageForPeriod(
+                $store->id,
+                $tasks,
+                $from,
+                $to,
+                $assignments->pluck('assigned_at', 'task.id')->all(),
+            );
+
             [$chart, $absent, $scoreInput] = $this->buildChart(
-                $tasksByStore->get($store->id, collect()),
+                $tasks,
                 $evaluation,
                 $allocs,
                 $from,
                 $to,
-                $dueCache
+                $dueCache,
+                $coverage,
+                $enforceCompletion
             );
             $chartScore = $this->scoring->chartScore($scoreInput);
 
@@ -110,6 +140,19 @@ class EvaluationService
                 'chart'       => $chart,
                 'chart_score' => $frozen ? (float) $evaluation->chart_score : $chartScore['pct'],
                 'weight_lost' => $chartScore['lost'],
+
+                // Roll-up of the completion gate, so the auditor can see at a
+                // glance that a store is being auto-failed rather than having to
+                // hover every locked cell to find out.
+                //
+                // Two numbers, because they answer different questions: how many
+                // tasks the store did not log, and how many of those the SYSTEM
+                // failed. They differ whenever the auditor took a locked cell and
+                // marked it N/A or failed it himself.
+                'completion_enforced' => $enforceCompletion,
+                'tasks_not_completed' => collect($chart)->flatten(1)->where('evaluable', false)->count(),
+                'tasks_auto_failed'   => collect($chart)->flatten(1)->where('verdict_source', 'system')->count(),
+                'tasks_in_play'       => count($scoreInput),
 
                 'absent_tasks' => $absent,
                 'allocations'  => $allocs->map(fn ($a) => [
@@ -196,7 +239,9 @@ class EvaluationService
         Collection $allocations,
         $from,
         $to,
-        array &$dueCache
+        array &$dueCache,
+        array $coverage = [],
+        bool $enforceCompletion = false
     ): array {
         $byTask = $evaluation ? $evaluation->chartVerdicts->keyBy('cleaning_task_id') : collect();
 
@@ -249,6 +294,34 @@ class EvaluationService
             $effective = $base + $bonus;
             $verdict   = $verdictRow->verdict ?? null;
 
+            $cov = $coverage[$task->id] ?? [
+                'expected' => 0, 'found' => 0, 'coverage_pct' => 100.0,
+                'done' => true, 'status' => 'not_owed',
+                'last_done_at' => null, 'done_by' => [], 'late' => false,
+            ];
+
+            // Locked = the store owed occurrences this period and did not log
+            // enough of them. `expected > 0` matters: a task assigned to the
+            // store mid-period owes nothing for the days before it existed
+            // here, and must not be auto-failed for them.
+            $locked = $enforceCompletion && $cov['expected'] > 0 && !$cov['done'];
+
+            // The auditor keeps two ways to be right about a locked task:
+            // `not_applicable` (it should not have been done at all — store
+            // closed, equipment gone) and `fail` (same answer, entered by a
+            // person). Only `pass` is taken away.
+            $effectiveVerdict = match (true) {
+                $verdict === 'not_applicable' => 'not_applicable',
+                $locked                       => 'fail',
+                default                       => $verdict,
+            };
+
+            $source = match (true) {
+                $verdict !== null && $verdict !== ''                 => $verdictRow->source ?? 'auditor',
+                $effectiveVerdict === 'fail' && $locked              => 'system',
+                default                                             => null,
+            };
+
             $chart[$task->frequency][] = [
                 'task_id'         => $task->id,
                 'name'            => $task->name,
@@ -257,15 +330,31 @@ class EvaluationService
                 // Kept as an alias for one release so existing clients don't break.
                 'weight'          => $effective,
                 'allocated_from'  => $this->allocationSources($allocations, $task->id, $tasks),
-                'verdict'         => $verdict,
+                'verdict'         => $effectiveVerdict,
+                'verdict_source'  => $source,
                 'note'            => $verdictRow->note ?? null,
                 'photos'          => $verdictRow ? $verdictRow->attachments->map(fn ($a) => '/storage/' . $a->path)->values() : [],
                 'historical'      => $historical,
+
+                // ── the completion gate ──
+                'completion_expected' => $cov['expected'],
+                'completion_found'    => $cov['found'],
+                'completion_pct'      => $cov['coverage_pct'],
+                'completion_status'   => $cov['status'],
+                'completion_done'     => $cov['done'],
+                'completion_late'     => $cov['late'],
+                'last_done_at'        => $cov['last_done_at'],
+                'done_by'             => $cov['done_by'],
+                // The two the client actually renders: disable Pass, say why.
+                'evaluable'           => !$locked,
+                'lock_reason'         => $locked
+                    ? ($cov['found'] > 0 ? 'partially_completed' : 'not_completed')
+                    : null,
             ];
 
             $scoreInput[] = [
                 'weight'  => $effective,
-                'verdict' => $verdict,
+                'verdict' => $effectiveVerdict,
                 'ref'     => ['kind' => 'chart', 'id' => $task->id, 'name' => $task->name],
             ];
         }
@@ -295,9 +384,15 @@ class EvaluationService
      * `withTrashed()` so a task deleted after being graded still shows up in the
      * periods where it has a verdict.
      *
+     * Each row carries `assigned_at` — the pivot's `created_at`, i.e. when this
+     * task was attached to THIS store. The completion gate needs it: a task
+     * added on Friday must not auto-fail the store for Tuesday to Thursday,
+     * when it did not yet exist there.
+     *
      * @param  int[]  $storeIds
+     * @return Collection<int, Collection<int, array{store_id:int, task:CleaningTask, assigned_at:mixed}>>
      */
-    private function tasksByStore(array $storeIds): Collection
+    private function taskAssignmentsByStore(array $storeIds): Collection
     {
         if (empty($storeIds)) {
             return collect();
@@ -309,9 +404,12 @@ class EvaluationService
             ->get()
             ->flatMap(fn (CleaningTask $task) => $task->stores
                 ->whereIn('id', $storeIds)
-                ->map(fn ($s) => ['store_id' => $s->id, 'task' => $task]))
-            ->groupBy('store_id')
-            ->map(fn ($rows) => $rows->pluck('task'));
+                ->map(fn ($s) => [
+                    'store_id'    => $s->id,
+                    'task'        => $task,
+                    'assigned_at' => $s->pivot->created_at ?? null,
+                ]))
+            ->groupBy('store_id');
     }
 
     /**

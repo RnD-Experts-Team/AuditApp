@@ -90,6 +90,10 @@ class EvaluationController extends Controller
             return $locked;
         }
 
+        if ($refused = $this->completionGateResponse($data, $periodType)) {
+            return $refused;
+        }
+
         DB::transaction(function () use ($data, $periodType, $images) {
             $evaluation = Evaluation::firstOrCreate(
                 ['store_id' => $data['store_id'], 'period_type' => $periodType, 'period_key' => $data['period_key']],
@@ -131,6 +135,11 @@ class EvaluationController extends Controller
                         'frequency' => $task->frequency,
                         'weight'    => (int) ($task->weight ?? 0),
                         'verdict'   => $state,
+                        // A person pressed a button. The only thing that writes
+                        // 'system' is the completion gate in EvaluationService,
+                        // which never persists a row at all — so anything stored
+                        // here is by definition an auditor's decision.
+                        'source'    => 'auditor',
                         'note'      => $data['note'] ?? null,
                     ],
                 );
@@ -280,6 +289,47 @@ class EvaluationController extends Controller
 
         $cell->attachments()->delete();
         $cell->delete();
+    }
+
+    /**
+     * The completion gate: a chart task the store never marked complete cannot
+     * be PASSED.
+     *
+     * Only `pass` is refused. `fail` says the same thing a locked cell already
+     * says and records that a human looked; `not_applicable` is the auditor's
+     * way of saying the task should not have been done at all this period
+     * (store closed, equipment removed) and must stay available, or he is left
+     * with no way to be right.
+     *
+     * The check reads the grid rather than the completion lookup directly, so
+     * the API can never refuse something the grid shows as allowed — one source
+     * of truth, at the cost of one extra single-store grid build on `pass`.
+     */
+    private function completionGateResponse(array $data, string $periodType): ?JsonResponse
+    {
+        if ($data['kind'] !== 'chart' || ($data['verdict'] ?? null) !== 'pass') {
+            return null;
+        }
+
+        $row = $this->evaluations
+            ->buildGrid($periodType, $data['period_key'], [(int) $data['store_id']])['rows']
+            ->first();
+
+        $cell = collect($row['chart'] ?? [])
+            ->flatten(1)
+            ->firstWhere('task_id', (int) $data['cleaning_task_id']);
+
+        if (!$cell || ($cell['evaluable'] ?? true)) {
+            return null;
+        }
+
+        return response()->json([
+            'message' => "\"{$cell['name']}\" was not marked complete for this period, so it cannot be passed. "
+                . 'Fail it, or mark it N/A if it did not apply.',
+            'reason'              => $cell['lock_reason'],
+            'completion_expected' => $cell['completion_expected'],
+            'completion_found'    => $cell['completion_found'],
+        ], 422);
     }
 
     private function finalizedResponse(int|string $storeId, string $periodType, string $periodKey): ?JsonResponse

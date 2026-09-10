@@ -24,9 +24,12 @@ class CleaningSettingController extends Controller
 
         return response()->json([
             'data' => [
-                'score_formula'          => $v['score_formula'],
-                'items_share'            => (int) $v['items_share'],
-                'chart_share'            => (int) $v['chart_share'],
+                'score_formula'             => $v['score_formula'],
+                'items_share'               => (int) $v['items_share'],
+                'chart_share'               => (int) $v['chart_share'],
+                'chart_requires_completion' => filter_var($v['chart_requires_completion'], FILTER_VALIDATE_BOOLEAN),
+                'completion_rule'           => $v['completion_rule'],
+                'completion_threshold'      => (int) $v['completion_threshold'],
             ],
             'defaults' => CleaningSetting::DEFAULTS,
             'explain'  => [
@@ -37,6 +40,12 @@ class CleaningSettingController extends Controller
                     . 'final score. Cleaning tasks have no auto_fail state.',
                 'frozen'        => 'Changing these never alters an evaluation that is already finalized — '
                     . 'those keep the scores they were finalized with.',
+                'chart_requires_completion' => 'When true, a chart task the store never marked complete cannot '
+                    . 'be passed: the grid locks the cell and fails it automatically. false restores the old '
+                    . 'behaviour exactly.',
+                'completion_rule' => "How much counts as done when a task is due several times in one period "
+                    . "(a daily task is due 7 times in a week). 'all' = every occurrence, 'any' = at least one, "
+                    . "'threshold' = at least completion_threshold percent.",
             ],
         ]);
     }
@@ -47,9 +56,12 @@ class CleaningSettingController extends Controller
        
 
         $data = $request->validate([
-            'score_formula'          => ['sometimes', 'required', Rule::in(['average', 'excel'])],
-            'items_share'            => ['sometimes', 'required', 'integer', 'min:0', 'max:100'],
-            'chart_share'            => ['sometimes', 'required', 'integer', 'min:0', 'max:100'],
+            'score_formula'             => ['sometimes', 'required', Rule::in(['average', 'excel'])],
+            'items_share'               => ['sometimes', 'required', 'integer', 'min:0', 'max:100'],
+            'chart_share'               => ['sometimes', 'required', 'integer', 'min:0', 'max:100'],
+            'chart_requires_completion' => ['sometimes', 'required', 'boolean'],
+            'completion_rule'           => ['sometimes', 'required', Rule::in(['all', 'any', 'threshold'])],
+            'completion_threshold'      => ['sometimes', 'required', 'integer', 'min:1', 'max:100'],
         ]);
 
         // Shares that do not total 100 would quietly scale every score, so reject

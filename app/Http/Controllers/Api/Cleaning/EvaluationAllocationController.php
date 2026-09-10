@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Cleaning;
 use App\Http\Controllers\Controller;
 use App\Models\CleaningWeightAllocation;
 use App\Models\Evaluation;
+use App\Services\Cleaning\EvaluationAllocationService;
 use App\Services\Cleaning\EvaluationService;
 use App\Services\Cleaning\PeriodKeyService;
 use Illuminate\Http\JsonResponse;
@@ -33,7 +34,65 @@ class EvaluationAllocationController extends Controller
     public function __construct(
         private readonly EvaluationService $evaluations,
         private readonly PeriodKeyService $periods,
+        private readonly EvaluationAllocationService $allocations,
     ) {
+    }
+
+    /**
+     * Copy one store's whole split onto other stores, for the SAME period.
+     *
+     * The auditor builds the distribution once on store 1 and presses one
+     * button for the rest. It is nearly free because tasks are shared between
+     * stores and `weight` lives on the task row, so the amounts are already
+     * correct for every store — see EvaluationAllocationService.
+     *
+     * `dry_run` returns exactly the same shape without writing anything, so the
+     * UI can show "6 stores fine, 1 skipped — finalized" BEFORE committing. On
+     * a bulk write across stores that preview is worth more than it costs.
+     */
+    public function copy(Request $request): JsonResponse
+    {
+        $data = $request->validate(array_merge(PeriodKeyService::validationRules(), [
+            'source_store_id'    => ['required', 'integer', 'exists:stores,id'],
+            // Capped: without a limit, "select all stores" is one request that
+            // rewrites every store's report in the chain.
+            'target_store_ids'   => ['required', 'array', 'min:1', 'max:50'],
+            'target_store_ids.*' => ['integer', 'distinct', 'exists:stores,id'],
+            'dry_run'            => ['nullable', 'boolean'],
+        ]));
+
+        $sourceStoreId = (int) $data['source_store_id'];
+        $periodType    = $data['period_type'] ?? 'week';
+
+        // Access is checked on the source AND every target. Silently dropping a
+        // store the caller may not see would be worse than refusing outright —
+        // he would believe the copy landed everywhere.
+        $this->assertCanAccess($request, $sourceStoreId);
+
+        $targets = collect($data['target_store_ids'])
+            ->map(fn ($id) => (int) $id)
+            ->reject(fn ($id) => $id === $sourceStoreId)   // copying onto itself is a no-op
+            ->unique()
+            ->values();
+
+        foreach ($targets as $targetStoreId) {
+            $this->assertCanAccess($request, $targetStoreId);
+        }
+
+        if ($targets->isEmpty()) {
+            throw ValidationException::withMessages([
+                'target_store_ids' => ['Choose at least one store other than the source store.'],
+            ]);
+        }
+
+        return response()->json($this->allocations->copy(
+            $sourceStoreId,
+            $targets->all(),
+            $periodType,
+            $data['period_key'],
+            (bool) ($data['dry_run'] ?? false),
+            Auth::id(),
+        ));
     }
 
     /**
