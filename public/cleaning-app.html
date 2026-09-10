@@ -93,11 +93,15 @@
   .tk.absent .tkv{font-size:9px;font-style:italic}
   .tk.absent{cursor:pointer}.tk.absent:hover{border-color:var(--head,#1e4d3b);background:#f2f5f4}
   .tk.absent.allocated{border-style:solid;background:#f0f5f2}
-  /* Locked = the store never marked this task complete, so it cannot be passed.
-     Hatched, so it reads as "blocked" at a glance and not as a normal fail. */
-  .tk.locked{background:repeating-linear-gradient(135deg,#fff5f5,#fff5f5 5px,#ffecec 5px,#ffecec 10px);border-color:#f3c9c9}
+  /* Locked = the store has not marked this task complete, so it cannot be
+     passed. Hatched, so it reads as "blocked" and not as a normal fail.
+     Two flavours, because they mean different things:
+       .locked  the deadline passed — auto-failed        (red)
+       .waiting the period is still open — nothing failed yet (amber) */
+  .tk.locked{background:repeating-linear-gradient(135deg,#fff5f5,#fff5f5 5px,#ffecec 5px,#ffecec 10px);border-color:#f3c9c9;cursor:not-allowed}
   .tk.locked .tkname::before{content:'🔒 ';font-size:9px}
-  .tk .tkcov{position:absolute;top:2px;right:4px;font-size:8.5px;font-weight:700;color:#b06a6a;letter-spacing:.2px}
+  .tk.waiting{background:repeating-linear-gradient(135deg,#fffdf3,#fffdf3 5px,#fdf6e0 5px,#fdf6e0 10px);border-color:#ecdda6;cursor:not-allowed}
+  .tk.waiting .tkname::before{content:'⏳ ';font-size:9px}
   .tk{position:relative}
   .tk .tksys{font-size:8px;font-weight:700;color:#c05252;text-transform:uppercase;letter-spacing:.3px}
   .autobadge{display:inline-block;margin-top:3px;font-size:9.5px;font-weight:700;color:#c05252;background:#fdeaea;border-radius:4px;padding:1px 5px}
@@ -311,7 +315,8 @@
             </div>
           </div>
           <div class="note"><b>Items:</b> click a cell to open the grade popup (verdict + notice + photos). <b>Chart tasks:</b> click to cycle Pass → Fail → N/A → clear (tasks have no Auto Fail). <b>N/A</b> takes a task out of the score without counting as a failure; <b>clear</b> erases the cell, its notice and its photos. Scores come from the API.
-            <br>🔒 <b>Hatched task = the store never marked it complete</b>, so it cannot be passed — it is failed automatically (<span class="tksys" style="font-size:9px">auto</span>) and clicking cycles Fail → N/A only. The small <b>4/7</b> in the corner is how many times it was marked complete out of how many were owed. Only occurrences whose period has <b>already ended</b> are counted, so an open week never auto-fails anyone.
+            <br>⏳ <b>Amber task = the store has not marked it complete, and the period is still open.</b> The cell is <b>read-only</b> — there is no work to judge — but nothing is failed yet, because the store still has time.
+            <br>🔒 <b>Red hatched task = never marked complete and the deadline passed</b>, so it is failed automatically (<span class="tksys" style="font-size:9px">auto</span>). Both are read-only: the auditor cannot pass, fail or N/A a task the store never did. One completion in the period unlocks it.
             <br>📋 <b>Dashed task = not due this period</b> — click it to distribute its weight, then use <b>Copy to other stores</b> in that popup to apply the same split elsewhere in one button.</div>
           <div class="legend"><span><i style="background:var(--pass-bg);border:1px solid var(--pass)"></i>Pass</span><span><i style="background:var(--fail-bg);border:1px solid var(--fail)"></i>Fail</span><span><i style="background:var(--auto-bg);border:1px solid var(--auto)"></i>Auto Fail</span><span><i style="background:#f1f3f5;border:1px solid #c7ccd1"></i>N/A <span class="hint">— not scored</span></span><span><i style="background:#faf9f5;border:1px dashed #c7ccd1"></i>Not graded <span class="hint">— blocks Finalize</span></span></div>
           <div class="matrix-wrap"><table class="eval-grid" id="evalGrid"></table></div>
@@ -439,7 +444,7 @@
     <div class="field" style="margin-bottom:16px;border-top:1px solid var(--line);padding-top:16px">
       <label>Evaluation requires completion</label>
       <div class="seg" id="scGateSeg" style="margin-top:6px"></div>
-      <div class="hint" style="margin-top:6px">When ON, a chart task the store never marked complete cannot be passed — the cell locks and fails automatically. OFF restores the old behaviour exactly.</div>
+      <div class="hint" style="margin-top:6px">When ON, a chart task the store never marked complete is <b>read-only</b> — the auditor cannot pass, fail or N/A it — and it is failed automatically once its deadline passes. OFF restores the old behaviour exactly.</div>
     </div>
 
     <div class="field" id="scRuleWrap" style="margin-bottom:16px">
@@ -450,7 +455,7 @@
         <input type="number" id="scThresh" min="1" max="100" style="width:80px" oninput="onScoringThreshChange()">
         <span class="hint">% of the occurrences owed</span>
       </div>
-      <div class="hint" style="margin-top:6px">A daily task is due <b>7 times</b> in one week, a weekly task once. Only occurrences whose period has already ended are counted, so an open week never auto-fails anyone.</div>
+      <div class="hint" style="margin-top:6px"><b>Marked complete once</b> is the normal setting: the store did the task, so the auditor can evaluate it. The stricter options exist only if you ever want to require a daily task to be marked on <b>every</b> day of the week. Either way, a task is only <b>failed</b> once its deadline has passed.</div>
     </div>
 
     <div id="scPreview" style="background:#f5f7f6;border-radius:8px;padding:10px 12px;font-size:12.5px"></div>
@@ -817,15 +822,24 @@ function renderEval(){
       return `<td class="cc-cell">${absent}${list.map(t=>{const cls=t.verdict||'';
         const mark=t.verdict==='pass'?'P':t.verdict==='fail'?'F':t.verdict==='not_applicable'?'N/A':'·';
         const boost=(t.allocated_from&&t.allocated_from.length)?`<span class="tkboost" title="${t.allocated_from.map(a=>'+'+a.amount+' from '+a.name).join(', ')}">+${t.allocated_from.reduce((n,a)=>n+a.amount,0)}</span>`:'';
-        // A task the store never marked complete cannot be passed. The cell is
-        // hatched, shows the coverage it is missing, and cycles Fail → N/A only.
+        // A task the store has not marked complete is READ-ONLY: no verdict at
+        // all, so the cell gets no click handler (see below). Hatched amber while
+        // the period is still open (nothing failed yet), red once the deadline
+        // has passed (failed automatically by the system).
         const lock=t.evaluable===false;
-        const cov=(t.completion_expected>0)?`<span class="tkcov" title="Marked complete ${t.completion_found} of ${t.completion_expected} time(s) this period">${t.completion_found}/${t.completion_expected}</span>`:'';
+        const waiting=lock && t.lock_reason==='period_not_finished';
         const sys=(t.verdict_source==='system')?'<span class="tksys">auto</span>':'';
-        const tip=lock
-          ? `Not marked complete (${t.completion_found}/${t.completion_expected}) — cannot be passed. Click: Fail → N/A`
-          : (t.completion_late?'Marked complete late. ':'')+'Click: Pass → Fail → N/A → clear';
-        return `<div class="tk ${cls}${lock?' locked':''}" title="${tip}" onclick="cycleCC(${row.store_id},${t.task_id},'${t.verdict||''}',${lock})"><div class="tkname">${t.name}</div>${cov}<span class="tkw">${t.effective_weight??t.weight}${boost}</span><span class="tkv">${mark}${sys}</span></div>`;}).join('')}</td>`;}).join('');
+        // No counts on the cell: the rule is "did the store mark it complete or
+        // not". A "1/5" badge would read as a target the store has to hit, which
+        // is not what is being measured.
+        // A locked cell is READ-ONLY: no click handler at all, because there is
+        // no verdict the auditor is allowed to set on it.
+        const tip=waiting
+          ? 'The store has not marked this complete, so it cannot be evaluated. The period is still open — the store can still do it.'
+          : lock
+            ? 'The store never marked this complete, so it cannot be evaluated. It has been failed automatically.'
+            : (t.completion_late?'Marked complete late. ':'Marked complete. ')+'Click: Pass → Fail → N/A → clear';
+        return `<div class="tk ${cls}${lock?(waiting?' waiting':' locked'):''}" title="${tip}" ${lock?'':`onclick="cycleCC(${row.store_id},${t.task_id},'${t.verdict||''}')"`}><div class="tkname">${t.name}</div><span class="tkw">${t.effective_weight??t.weight}${boost}</span><span class="tkv">${mark}${sys}</span></div>`;}).join('')}</td>`;}).join('');
     // Completeness is the auditor's progress, deliberately separate from the
     // store's score — and it is what gates Finalize, so it has to be visible.
     const locked=!!row.finalized_at;
@@ -884,16 +898,14 @@ async function reopenStore(storeId){
 // state that did nothing. Inspection items still have it.
 const CC_CYCLE=['pass','fail','not_applicable','empty'];
 
-// A task the store never marked complete has no Pass in its cycle — the server
-// refuses it (422), so offering it would only produce an error. The auditor is
-// left with the two answers that are still true: Fail (same verdict, entered by
-// a person) and N/A (it should not have been done at all this period).
-const CC_CYCLE_LOCKED=['fail','not_applicable'];
-
-async function cycleCC(storeId,taskId,cur,locked){
-  const cycle=locked?CC_CYCLE_LOCKED:CC_CYCLE;
-  const i=cycle.indexOf(cur);
-  const next=cycle[(i+1)%cycle.length];   // unknown/'' → index -1 → first entry
+// A task the store never marked complete has NO cycle: the cell is read-only and
+// carries no click handler, because there is no verdict the auditor may set on
+// it. The system decides it instead — nothing while the deadline is open, `fail`
+// once it has passed. The server refuses every verdict on such a task (422), so
+// offering any button would only produce an error.
+async function cycleCC(storeId,taskId,cur){
+  const i=CC_CYCLE.indexOf(cur);
+  const next=CC_CYCLE[(i+1)%CC_CYCLE.length];   // unknown/'' → index -1 → 'pass'
   await setCC(storeId,taskId,next);
 }
 
@@ -907,7 +919,7 @@ async function setCC(storeId,taskId,verdict){
 }
 
 // Kept so the Due page's "Evaluate" shortcut keeps working unchanged.
-async function toggleCC(storeId,taskId,cur){ await cycleCC(storeId,taskId,cur,false); }
+async function toggleCC(storeId,taskId,cur){ await cycleCC(storeId,taskId,cur); }
 /* ---------------- WEIGHT ALLOCATION ---------------- */
 // A task that is not due this period still has a weight. This screen hands that
 // weight to the tasks that ARE in play, and the auditor chooses the split.
@@ -1156,7 +1168,7 @@ function renderScoringSeg(){
 function setScoringFormula(f){ SCORING.score_formula=f; renderScoringSeg(); }
 
 // ── the completion gate ──
-const SC_RULES={all:'Every occurrence',any:'At least one',threshold:'A percentage'};
+const SC_RULES={any:'Marked complete once',all:'Every occurrence',threshold:'A percentage'};
 
 function renderGateSeg(){
   const on=!!SCORING.chart_requires_completion;
@@ -1319,14 +1331,17 @@ async function quickEvaluateDue(i){
 // Why a task failed matters more than the fact that it did: "you did not do it"
 // and "you did it badly" are very different things to tell a store.
 function completionLine(t){
-  if(t.completion_expected===0)
-    return `<div class="meta">Nothing owed yet this period — the store still has time.</div>`;
+  if(!t.completion_expected_period) return `<div class="meta">Not due this period.</div>`;
   const who=(t.done_by&&t.done_by.length)?' by '+t.done_by.join(', '):'';
+  const when=t.last_done_at?' on '+new Date(t.last_done_at).toLocaleString():'';
   const late=t.completion_late?' <span style="color:var(--fail)">(marked late)</span>':'';
   if(t.completion_done)
-    return `<div class="meta">✓ Marked complete ${t.completion_found}/${t.completion_expected}${who}${late}</div>`;
-  return `<div class="meta" style="color:var(--fail)">🔒 Marked complete only ${t.completion_found} of ${t.completion_expected} time(s) owed —
-    ${t.verdict_source==='system'?'failed automatically':'cannot be passed'}.${who?' Logged'+who+'.':''}</div>`;
+    return `<div class="meta">✓ Marked complete${who}${when}${late}</div>`;
+  if(t.lock_reason==='period_not_finished')
+    return `<div class="meta" style="color:#a8862f">⏳ Not marked complete yet — cannot be evaluated.
+      The period is still open, so nothing is failed.</div>`;
+  return `<div class="meta" style="color:var(--fail)">🔒 Never marked complete —
+    ${t.auto_failed?'failed automatically':'cannot be evaluated'}.</div>`;
 }
 
 function openStoreDetails(storeId){
