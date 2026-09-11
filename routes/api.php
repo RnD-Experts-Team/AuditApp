@@ -84,6 +84,9 @@ Route::middleware([
         // One button: the split built on one store, copied to the stores chosen.
         // Send dry_run=true first to preview what will be written and skipped.
         Route::post('evaluations/allocations/copy', [EvaluationAllocationController::class, 'copy'])->name('cleaning.allocations.copy');
+        // The undo for that copy: clear the split on many stores in one call.
+        // POST, not DELETE — it carries a body and a dry_run preview.
+        Route::post('evaluations/allocations/remove', [EvaluationAllocationController::class, 'remove'])->name('cleaning.allocations.remove');
         Route::delete('evaluations/allocations', [EvaluationAllocationController::class, 'destroy'])->name('cleaning.allocations.destroy');
 
         Route::get('inspection-items', [InspectionItemController::class, 'index'])->name('cleaning.items.index');

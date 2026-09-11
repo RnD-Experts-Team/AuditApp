@@ -4,6 +4,8 @@ namespace App\Services\Cleaning;
 
 use App\Models\CleaningTask;
 use App\Models\CleaningWeightAllocation;
+use App\Models\Evaluation;
+use App\Models\Store;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -100,7 +102,125 @@ class EvaluationAllocationService
         return $summary;
     }
 
+    /**
+     * Clear saved splits across many stores at once — the mirror of copy().
+     *
+     * The copy is bulk but the delete was not: undoing a copy onto 8 stores
+     * meant 24 separate DELETE calls from the client, one per store per split.
+     *
+     * ── "clear", not "undo" ──
+     * This removes what is there now. It does NOT restore whatever a store had
+     * before a copy overwrote it — the copy deletes the old rows, and we keep no
+     * snapshot of them. A real undo means storing every replaced split, which is
+     * a new table for a case that barely happens (the auditor copies precisely
+     * because the other stores are empty). Deliberate limitation, written down
+     * so nobody assumes otherwise.
+     *
+     * Removing is always safe: an absent task's weight simply goes back to being
+     * out of play, which is exactly the state when nobody has allocated at all.
+     * It can never leave a period half-valid.
+     *
+     * @param  int[]  $storeIds
+     * @param  int[]  $sourceTaskIds  empty = every split in the period
+     * @return array<string, mixed>
+     */
+    public function remove(
+        array $storeIds,
+        string $periodType,
+        string $periodKey,
+        array $sourceTaskIds,
+        bool $dryRun,
+    ): array {
+        // Deliberately NOT buildGrid(): removing needs no due/in-play checks, and
+        // building a full grid for up to 50 stores to delete some rows would be
+        // pure waste. Three cheap reads instead.
+        $names     = Store::query()->whereIn('id', $storeIds)->pluck('store', 'id');
+        $finalized = Evaluation::query()
+            ->whereIn('store_id', $storeIds)
+            ->where('period_type', $periodType)
+            ->where('period_key', $periodKey)
+            ->whereNotNull('finalized_at')
+            ->pluck('store_id')
+            ->map(fn ($v) => (int) $v)
+            ->all();
+
+        $rows = $this->allocationQuery($storeIds, $periodType, $periodKey, $sourceTaskIds)
+            ->get()
+            ->groupBy('store_id');
+
+        $taskNames = CleaningTask::withTrashed()
+            ->whereIn('id', $rows->flatten(1)->pluck('source_task_id')->unique()->all())
+            ->pluck('name', 'id');
+
+        $results   = [];
+        $clearable = [];
+
+        foreach ($storeIds as $storeId) {
+            $storeId = (int) $storeId;
+            $result  = ['store_id' => $storeId, 'store' => $names[$storeId] ?? null, 'removed' => 0, 'skipped' => []];
+
+            // The report went out with these numbers. Clearing the split would
+            // change the score a store has already been shown.
+            if (in_array($storeId, $finalized, true)) {
+                $result['skipped'][] = ['reason' => 'evaluation_already_finalized',
+                    'detail' => 'Reopen the evaluation first if this really needs to change.'];
+                $results[] = $result;
+                continue;
+            }
+
+            $splits = ($rows->get($storeId) ?? collect())->groupBy('source_task_id');
+
+            if ($splits->isEmpty()) {
+                $result['skipped'][] = ['reason' => 'nothing_to_remove',
+                    'detail' => 'This store has no saved split for this period.'];
+                $results[] = $result;
+                continue;
+            }
+
+            $result['removed'] = $splits->count();
+            $result['splits']  = $splits->map(fn ($group, $sourceTaskId) => [
+                'source_task_id' => (int) $sourceTaskId,
+                'name'           => $taskNames[$sourceTaskId] ?? $this->taskName((int) $sourceTaskId),
+                'amount'         => (int) $group->sum('amount'),
+                'targets'        => $group->count(),
+            ])->values()->all();
+
+            $clearable[] = $storeId;
+            $results[]   = $result;
+        }
+
+        if (!$dryRun && !empty($clearable)) {
+            DB::transaction(function () use ($clearable, $periodType, $periodKey, $sourceTaskIds) {
+                $this->allocationQuery($clearable, $periodType, $periodKey, $sourceTaskIds)->delete();
+            });
+        }
+
+        return [
+            'dry_run' => $dryRun,
+            'period'  => ['period_type' => $periodType, 'period_key' => $periodKey],
+            'scope'   => empty($sourceTaskIds) ? 'all_splits' : 'selected_tasks',
+            'results' => $results,
+        ];
+    }
+
     // ── internals ──
+
+    /**
+     * @param  int[]  $storeIds
+     * @param  int[]  $sourceTaskIds
+     */
+    private function allocationQuery(
+        array $storeIds,
+        string $periodType,
+        string $periodKey,
+        array $sourceTaskIds,
+    ) {
+        return CleaningWeightAllocation::query()
+            ->whereIn('store_id', $storeIds)
+            ->where('period_type', $periodType)
+            ->where('period_key', $periodKey)
+            ->when(!empty($sourceTaskIds), fn ($q) => $q->whereIn('source_task_id', $sourceTaskIds));
+    }
 
     /**
      * The source store's split for this period, grouped by the absent task that
