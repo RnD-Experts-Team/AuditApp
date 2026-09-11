@@ -96,6 +96,45 @@ class EvaluationAllocationController extends Controller
     }
 
     /**
+     * Clear saved splits across many stores at once — the undo for `copy()`.
+     *
+     * `destroy()` below removes one split from one store, which is right for the
+     * ✕ Reset button but useless after a bulk copy: undoing a copy onto 8 stores
+     * meant 24 calls from the client.
+     *
+     * Note it CLEARS rather than restores — see EvaluationAllocationService.
+     */
+    public function remove(Request $request): JsonResponse
+    {
+        $data = $request->validate(array_merge(PeriodKeyService::validationRules(), [
+            'store_ids'        => ['required', 'array', 'min:1', 'max:50'],
+            'store_ids.*'      => ['integer', 'distinct', 'exists:stores,id'],
+            // Omit entirely to clear every split in the period — the "I copied
+            // by mistake" case, which is what this endpoint exists for.
+            'source_task_ids'   => ['nullable', 'array', 'max:100'],
+            'source_task_ids.*' => ['integer', 'distinct', 'exists:cleaning_tasks,id'],
+            'dry_run'           => ['nullable', 'boolean'],
+        ]));
+
+        $periodType = $data['period_type'] ?? 'week';
+        $storeIds   = collect($data['store_ids'])->map(fn ($id) => (int) $id)->unique()->values();
+
+        // Every store is checked: a silent skip would leave the auditor believing
+        // the split was cleared everywhere.
+        foreach ($storeIds as $storeId) {
+            $this->assertCanAccess($request, $storeId);
+        }
+
+        return response()->json($this->allocations->remove(
+            $storeIds->all(),
+            $periodType,
+            $data['period_key'],
+            array_map('intval', $data['source_task_ids'] ?? []),
+            (bool) ($data['dry_run'] ?? false),
+        ));
+    }
+
+    /**
      * Current allocations plus the pool still waiting to be allocated.
      */
     public function index(Request $request): JsonResponse

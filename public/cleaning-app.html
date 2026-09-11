@@ -234,12 +234,12 @@
       <div class="f" style="flex:1;min-width:200px"><label>API base URL</label><input id="baseUrl"></div>
       <div class="f" style="flex:2;min-width:220px"><label>Bearer token</label><input id="token" placeholder="paste token (blank = expect 401)"></div>
       <div class="f" style="width:80px"><label>Store id</label><input id="storeId" value="1"></div>
-      <div class="f" style="width:130px"><label>Date (due)</label><input id="dueDate" type="date"></div>
+      <div class="f" style="width:130px"><label title="Only the Tasks page uses this — NOT the evaluation grid">Date · Tasks page</label><input id="dueDate" type="date" onchange="onDueDateChange()"></div>
       <div class="f" style="width:110px"><label>Eval period type</label>
         <select id="periodType" onchange="onPeriodTypeChange()"><option value="week">Week</option><option value="date">Date</option></select>
       </div>
-      <div class="f" style="width:150px"><label>Period</label>
-        <select id="periodKey" onchange="reloadView()"></select>
+      <div class="f" style="width:150px"><label title="THIS is what the evaluation grid reads">◀ Eval period</label>
+        <select id="periodKey" onchange="onPeriodKeyChange()"></select>
       </div>
       <div class="f"><label>&nbsp;</label><button class="btn sm pri" onclick="reloadView()">↻ Reload</button></div>
       <div class="f"><label>&nbsp;</label><span><span class="dot" id="connDot"></span> <span id="connTxt">idle</span></span></div>
@@ -401,6 +401,7 @@
   <div class="rpt-modal-ft">
     <button class="btn" id="allocResetBtn" onclick="resetAllocation()">↺ Reset</button>
     <button class="btn" id="allocCopyBtn" onclick="openCopySplit()" title="Apply this store's whole split to other stores">⧉ Copy to other stores</button>
+    <button class="btn" id="allocRemoveBtn" onclick="openRemoveSplit()" title="Clear saved distributions across stores — the undo for a wrong copy">🗑 Remove from stores</button>
     <div class="spacer"></div>
     <button class="btn" onclick="closeAllocation()">Cancel</button>
     <button class="btn pri" id="allocSaveBtn" onclick="saveAllocation()">✓ Save split</button>
@@ -471,11 +472,19 @@
      evaluation is already finalized has to be skipped rather than rewritten. -->
 <div class="overlay" id="cpOverlay" onclick="closeCopySplit()"></div>
 <div class="rpt-modal" id="cpModal" style="width:560px">
-  <div class="rpt-modal-hd"><div><h3>Copy split to other stores</h3><small id="cpSub" style="color:var(--muted)"></small></div><button class="x" onclick="closeCopySplit()">×</button></div>
+  <div class="rpt-modal-hd"><div><h3 id="cpTitle">Copy split to other stores</h3><small id="cpSub" style="color:var(--muted)"></small></div><button class="x" onclick="closeCopySplit()">×</button></div>
   <div class="rpt-modal-bd" style="background:#fff">
     <div id="cpHint" class="note" style="margin-bottom:10px"></div>
+    <!-- Remove only: narrow the delete to the one task whose window was opened,
+         instead of clearing the store's whole distribution. -->
+    <div class="field" id="cpScopeWrap" style="margin-bottom:10px;display:none">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+        <input type="checkbox" id="cpScopeOnly" onchange="onCpScopeChange()">
+        <span id="cpScopeLabel"></span>
+      </label>
+    </div>
     <div class="field">
-      <label>Copy to <span class="hint">(the source store is not listed)</span></label>
+      <label id="cpStoresLabel">Copy to <span class="hint">(the source store is not listed)</span></label>
       <div class="cpstores" id="cpStores"></div>
       <div style="margin-top:8px"><button class="btn sm" onclick="cpToggleAll(true)">Select all</button>
         <button class="btn sm" onclick="cpToggleAll(false)">Clear</button></div>
@@ -591,11 +600,41 @@ async function populatePeriodKeyOptions(preferredValue){
   return true;
 }
 
-async function onPeriodTypeChange(){ await populatePeriodKeyOptions(); reloadView(); }
+async function onPeriodTypeChange(){ await populatePeriodKeyOptions(); syncDueDateFromPeriod(); reloadView(); }
+
+/* The page has TWO date controls and they used to look interchangeable:
+   "Date · Tasks page" (#dueDate) drives the Tasks/Due screen, while the
+   evaluation grid reads ONLY the "Eval period" dropdown (#periodKey). Changing
+   the first one and expecting the grid to move is the obvious mistake — it looks
+   like the main date field and does nothing to the evaluation.
+
+   So while period type = Date the two are kept in sync in both directions. In
+   Week mode they are genuinely different things and are left alone. */
+function onPeriodKeyChange(){ syncDueDateFromPeriod(); reloadView(); }
+
+function syncDueDateFromPeriod(){
+  if($('#periodType').value!=='date') return;
+  const key=$('#periodKey').value.trim();
+  if(/^\d{4}-\d{2}-\d{2}$/.test(key)) $('#dueDate').value=key;
+}
+
+async function onDueDateChange(){
+  const d=$('#dueDate').value;
+  if($('#periodType').value==='date' && d){
+    const sel=$('#periodKey');
+    // The dropdown only offers a few days either side of today; if the picked
+    // date is outside that window, add it rather than silently ignoring it.
+    if(![...sel.options].some(o=>o.value===d)){
+      sel.insertAdjacentHTML('beforeend',`<option value="${d}">${d}</option>`);
+    }
+    sel.value=d;
+  }
+  reloadView();
+}
 
 // Pasting a token (or pointing at another server) is what makes /periods
 // reachable, so refill the dropdown when either changes.
-async function onConnectionChange(){ await populatePeriodKeyOptions(); reloadView(); }
+async function onConnectionChange(){ await populatePeriodKeyOptions(); syncDueDateFromPeriod(); reloadView(); }
 
 function toast(msg,err){const d=document.createElement('div');d.className='tmsg'+(err?' err':'');d.textContent=msg;$('#toast').appendChild(d);setTimeout(()=>d.remove(),4500);}
 function conn(ok){$('#connDot').className='dot'+(ok?' ok':'');$('#connTxt').textContent=ok?'connected':'error';}
@@ -1028,27 +1067,41 @@ async function resetAllocation(){
   $('#allocError').textContent=briefErr(r.data);
 }
 
-/* ---------------- COPY SPLIT TO OTHER STORES ---------------- */
-// The client's "one button": the distribution the auditor built on this store,
-// applied to the stores he picks, for the SAME period.
+/* ---------------- COPY / REMOVE SPLIT ACROSS STORES ---------------- */
+// Two operations, one modal, because they are the same shape: pick stores →
+// preview → apply.
 //
-// It is nearly free because tasks are SHARED between stores (one task row,
-// attached to many) and `weight` lives on the task — so the amounts are already
-// correct for every store and nothing has to be recalculated.
+//   COPY   the distribution built on this store, applied to the stores he picks.
+//          Nearly free, because tasks are SHARED between stores (one task row,
+//          attached to many) and `weight` lives on the task — so the amounts are
+//          already correct everywhere and nothing has to be recalculated.
 //
-// Preview before writing. This is a bulk write across stores, and some of them
-// legitimately cannot take the split: an evaluation already finalized must be
+//   REMOVE the undo for a copy that went to the wrong stores. Note it CLEARS
+//          rather than restores: a copy replaces whatever a store had, and we
+//          keep no snapshot of the replaced rows.
+//
+// Preview before writing, in both. These are bulk writes across stores, and some
+// stores legitimately cannot take them — an evaluation already finalized must be
 // skipped, not rewritten, or a store would be told one score and shown another.
-let CPCOPY=null;   // { sourceStoreId, targets:Set<int> }
+let CPCOPY=null;   // { mode:'copy'|'remove', sourceStoreId, targets:Set<int>, onlyTaskId:?int }
+
+// How many distinct splits a store has saved this period. Comes straight from
+// the grid row, so the picker needs no extra request.
+function storeSplitCount(row){
+  return new Set((row.allocations||[]).map(a=>a.source_task_id)).size;
+}
 
 function openCopySplit(){
   if(!ALLOC) return;
   const others=(GEVAL&&GEVAL.rows||[]).filter(r=>r.store_id!==ALLOC.storeId);
   if(!others.length){ toast('No other stores in this grid to copy to',true); return; }
 
-  CPCOPY={sourceStoreId:ALLOC.storeId,targets:new Set()};
+  CPCOPY={mode:'copy',sourceStoreId:ALLOC.storeId,targets:new Set(),onlyTaskId:null};
   const src=(GEVAL.rows||[]).find(r=>r.store_id===ALLOC.storeId);
+  $('#cpTitle').textContent='Copy split to other stores';
   $('#cpSub').textContent=`from store ${src?src.store:ALLOC.storeId} · ${GEVAL.period_key}`;
+  $('#cpStoresLabel').innerHTML='Copy to <span class="hint">(the source store is not listed)</span>';
+  $('#cpScopeWrap').style.display='none';
   $('#cpHint').innerHTML=`Copies <b>every</b> split saved on store <b>${src?src.store:ALLOC.storeId}</b> for
     <b>${GEVAL.period_key}</b> — not just "${ALLOC.source.name}" — to the stores you tick.
     <br><span class="hint">A store whose evaluation is finalized is skipped. A split whose tasks are not in play on
@@ -1058,16 +1111,59 @@ function openCopySplit(){
   renderCopyStores();
   $('#cpOverlay').classList.add('on'); $('#cpModal').classList.add('on');
 }
+
+// The undo for a copy that went to the wrong stores. Unlike copy, the store the
+// window was opened from IS listed — the auditor usually wants to clear it too.
+function openRemoveSplit(){
+  if(!ALLOC) return;
+  const withSplits=(GEVAL&&GEVAL.rows||[]).filter(r=>storeSplitCount(r)>0);
+  if(!withSplits.length){ toast('No store in this grid has a saved distribution for this period',true); return; }
+
+  CPCOPY={mode:'remove',sourceStoreId:ALLOC.storeId,targets:new Set(),onlyTaskId:null};
+  $('#cpTitle').textContent='Remove distribution from stores';
+  $('#cpSub').textContent=`${GEVAL.period_key} · ${withSplits.length} store(s) have a saved split`;
+  $('#cpStoresLabel').innerHTML='Remove from <span class="hint">(only stores that have a saved split)</span>';
+  $('#cpScopeWrap').style.display='';
+  $('#cpScopeOnly').checked=false;
+  $('#cpScopeLabel').innerHTML=`Only remove <b>"${ALLOC.source.name}"</b> — leave the store's other splits alone`;
+  $('#cpError').textContent=''; $('#cpResults').innerHTML='';
+  renderRemoveHint();
+  renderCopyStores();
+  $('#cpOverlay').classList.add('on'); $('#cpModal').classList.add('on');
+}
+
+function onCpScopeChange(){
+  CPCOPY.onlyTaskId=$('#cpScopeOnly').checked ? ALLOC.source.task_id : null;
+  $('#cpResults').innerHTML='';     // the preview is now stale
+  renderRemoveHint();
+  cpSyncButtons();
+}
+
+function renderRemoveHint(){
+  const what=CPCOPY.onlyTaskId ? `the split for <b>"${ALLOC.source.name}"</b>` : `<b>every</b> saved split`;
+  $('#cpHint').innerHTML=`Deletes ${what} on the stores you tick, for <b>${GEVAL.period_key}</b>.
+    The weight simply goes back to being out of play — the same state as never having distributed it.
+    <br><span class="hint">⚠️ This <b>clears</b>, it does not undo: if a copy replaced a store's own distribution,
+    removing will <b>not</b> bring the old one back. Stores whose evaluation is finalized are skipped.</span>`;
+}
+
 function closeCopySplit(){ $('#cpOverlay').classList.remove('on'); $('#cpModal').classList.remove('on'); CPCOPY=null; }
 
 function renderCopyStores(){
-  const rows=(GEVAL&&GEVAL.rows||[]).filter(r=>r.store_id!==CPCOPY.sourceStoreId);
+  const remove=CPCOPY.mode==='remove';
+  // Copy: every OTHER store. Remove: only stores that actually have something
+  // to delete — offering the rest would just return "nothing_to_remove".
+  const rows=(GEVAL&&GEVAL.rows||[]).filter(r=>remove
+    ? storeSplitCount(r)>0
+    : r.store_id!==CPCOPY.sourceStoreId);
   $('#cpStores').innerHTML=rows.map(r=>{
     const fin=!!r.finalized_at;
     const on=CPCOPY.targets.has(r.store_id);
+    const n=remove?storeSplitCount(r):0;
+    const badge=remove?` <span class="hint">(${n})</span>`:'';
     return `<div class="cpstore${on?' on':''}${fin?' dis':''}" ${fin?'title="Finalized — reopen it first"':`onclick="cpToggle(${r.store_id})"`}>
       <input type="checkbox" ${on?'checked':''} ${fin?'disabled':''} style="pointer-events:none">
-      <span>${fin?'🔒 ':''}${r.store}</span></div>`;
+      <span>${fin?'🔒 ':''}${r.store}${badge}</span></div>`;
   }).join('');
   cpSyncButtons();
 }
@@ -1077,9 +1173,11 @@ function cpToggle(id){
   renderCopyStores();
 }
 function cpToggleAll(on){
+  const remove=CPCOPY.mode==='remove';
   CPCOPY.targets.clear();
-  if(on) (GEVAL.rows||[]).filter(r=>r.store_id!==CPCOPY.sourceStoreId && !r.finalized_at)
-          .forEach(r=>CPCOPY.targets.add(r.store_id));
+  if(on) (GEVAL.rows||[])
+    .filter(r=>!r.finalized_at && (remove ? storeSplitCount(r)>0 : r.store_id!==CPCOPY.sourceStoreId))
+    .forEach(r=>CPCOPY.targets.add(r.store_id));
   $('#cpResults').innerHTML='';
   renderCopyStores();
 }
@@ -1088,14 +1186,26 @@ function cpSyncButtons(){
   ['#cpPreviewBtn','#cpApplyBtn'].forEach(sel=>{
     $(sel).disabled=!n; $(sel).style.opacity=n?1:.45;
   });
-  $('#cpApplyBtn').textContent=n?`⧉ Copy to ${n} store${n>1?'s':''}`:'⧉ Copy now';
+  const remove=CPCOPY&&CPCOPY.mode==='remove';
+  const btn=$('#cpApplyBtn');
+  btn.textContent = remove
+    ? (n?`🗑 Remove from ${n} store${n>1?'s':''}`:'🗑 Remove now')
+    : (n?`⧉ Copy to ${n} store${n>1?'s':''}`:'⧉ Copy now');
+  // Destructive action, so it must not look like the friendly primary button.
+  btn.style.background = remove?'var(--fail)':'';
+  btn.style.borderColor = remove?'var(--fail)':'';
 }
 
 async function runCopySplit(dryRun){
   if(!CPCOPY||!CPCOPY.targets.size) return null;
-  const body={source_store_id:CPCOPY.sourceStoreId,target_store_ids:[...CPCOPY.targets],
-              ...cfg.period(),dry_run:dryRun};
-  const r=await api('POST','/cleaning/evaluations/allocations/copy',{body});
+  const remove=CPCOPY.mode==='remove';
+  const body=remove
+    ? {store_ids:[...CPCOPY.targets], ...cfg.period(), dry_run:dryRun,
+       ...(CPCOPY.onlyTaskId?{source_task_ids:[CPCOPY.onlyTaskId]}:{})}
+    : {source_store_id:CPCOPY.sourceStoreId, target_store_ids:[...CPCOPY.targets],
+       ...cfg.period(), dry_run:dryRun};
+  const path=remove?'/cleaning/evaluations/allocations/remove':'/cleaning/evaluations/allocations/copy';
+  const r=await api('POST',path,{body});
   if(!r.ok){ $('#cpError').textContent=briefErr(r.data); return null; }
   $('#cpError').textContent='';
   renderCopyResults(r.data,dryRun);
@@ -1104,18 +1214,30 @@ async function runCopySplit(dryRun){
 async function previewCopySplit(){ await runCopySplit(true); }
 
 async function applyCopySplit(){
+  // Deleting across several stores at once has no undo, so make it deliberate.
+  if(CPCOPY.mode==='remove'){
+    const what=CPCOPY.onlyTaskId?`"${ALLOC.source.name}"`:'EVERY saved distribution';
+    if(!confirm(`Remove ${what} from ${CPCOPY.targets.size} store(s) for ${GEVAL.period_key}?\n\nThis cannot be undone.`)) return;
+  }
   const out=await runCopySplit(false);
   if(!out) return;
-  const copied=out.results.reduce((n,x)=>n+x.copied,0);
-  const stores=out.results.filter(x=>x.copied>0).length;
-  toast(copied?`Copied to ${stores} store${stores>1?'s':''}`:'Nothing copied — see the reasons',!copied);
+  if(CPCOPY.mode==='remove'){
+    const removed=out.results.reduce((n,x)=>n+x.removed,0);
+    const stores=out.results.filter(x=>x.removed>0).length;
+    toast(removed?`Removed from ${stores} store${stores>1?'s':''}`:'Nothing removed — see the reasons',!removed);
+  } else {
+    const copied=out.results.reduce((n,x)=>n+x.copied,0);
+    const stores=out.results.filter(x=>x.copied>0).length;
+    toast(copied?`Copied to ${stores} store${stores>1?'s':''}`:'Nothing copied — see the reasons',!copied);
+  }
   loadEval();
 }
 
 // Reasons are shown verbatim from the API. The auditor needs to know WHICH
-// store did not get the split and why, not just a count.
+// store was left out and why, not just a count.
 const CP_REASONS={
   nothing_to_copy:'source store has no saved split for this period',
+  nothing_to_remove:'this store has no saved split for this period',
   evaluation_already_finalized:'finalized — reopen it first',
   source_task_not_absent_here:'that task is not absent for this store',
   target_task_not_in_play:'a receiving task is not gradable here',
@@ -1123,11 +1245,20 @@ const CP_REASONS={
   store_not_visible:'store not in this grid'
 };
 function renderCopyResults(out,dryRun){
+  // Copy reports `copied`, remove reports `removed` — otherwise identical shapes,
+  // which is the point of using one modal for both.
+  const remove=CPCOPY&&CPCOPY.mode==='remove';
+  const scope=remove
+    ? (out.scope==='selected_tasks'?'the chosen task only':'every saved split')
+    : `${out.source.splits} split(s) on the source store`;
   const head=`<div style="font-weight:700;margin-bottom:6px">${dryRun?'Preview — nothing written yet':'Done'}
-    <span class="hint">· ${out.source.splits} split(s) on the source store</span></div>`;
+    <span class="hint">· ${scope}</span></div>`;
   $('#cpResults').innerHTML=head+out.results.map(r=>{
     const label=r.store||('#'+r.store_id);
-    const good=r.copied?`<span class="ok">✓ ${r.copied} split${r.copied>1?'s':''}</span>`:'<span class="no">— nothing</span>';
+    const n=remove?r.removed:r.copied;
+    const good=n
+      ? `<span class="ok">${remove?'🗑':'✓'} ${n} split${n>1?'s':''}</span>`
+      : '<span class="no">— nothing</span>';
     const bad=(r.skipped||[]).map(s=>`<div class="hint" style="margin-left:6px">↳ skipped: ${CP_REASONS[s.reason]||s.reason}</div>`).join('');
     return `<div class="cprow"><div style="flex:1"><b>${label}</b>${bad}</div><div>${good}</div></div>`;
   }).join('');
@@ -1542,6 +1673,7 @@ BOOTING=true;
 applyRole();
 (async () => {
   await populatePeriodKeyOptions();
+  syncDueDateFromPeriod();
   BOOTING=false;
   reloadView();
 })();
