@@ -13,7 +13,25 @@ class Evaluation extends Model
         'period_type',
         'period_key',
         'created_by',
+        'finalized_at',
+        'finalized_by',
+        'item_score',
+        'chart_score',
+        'final_score',
+        'score_formula',
     ];
+
+    protected $casts = [
+        'finalized_at' => 'datetime',
+        'item_score'   => 'float',
+        'chart_score'  => 'float',
+        'final_score'  => 'float',
+    ];
+
+    public function isFinalized(): bool
+    {
+        return $this->finalized_at !== null;
+    }
 
     public function store(): BelongsTo
     {

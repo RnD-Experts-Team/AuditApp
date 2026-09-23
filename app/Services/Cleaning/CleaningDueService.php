@@ -27,10 +27,88 @@ class CleaningDueService
             ->whereHas('stores', fn ($q) => $q->where('stores.id', $storeId))
             ->get();
 
-        return $tasks
+        $due = $tasks
             ->filter(fn (CleaningTask $t) => $this->schedule->isDueOnDate($t, $date))
-            ->map(fn (CleaningTask $t) => $this->itemFor($t, $storeId, $date))
             ->values();
+
+        // Load every completion these tasks need in TWO queries rather than two
+        // per task: one for this period's rows, one for the historical counts.
+        // Both are keyed by task id and handed to itemFor().
+        $taskIds = $due->pluck('id')->all();
+        $periodStarts = $due->mapWithKeys(fn (CleaningTask $t) => [
+            $t->id => $this->schedule->periodBounds($t, $date)[0]->toDateString(),
+        ])->all();
+
+        $current = $this->currentCompletions($storeId, $taskIds, $periodStarts);
+        $counts  = $this->completionCounts($storeId, $taskIds);
+
+        return $due
+            ->map(fn (CleaningTask $t) => $this->itemFor(
+                $t,
+                $date,
+                $current[$t->id] ?? null,
+                (int) ($counts[$t->id] ?? 0),
+            ))
+            ->values();
+    }
+
+    /**
+     * This period's completion for each task, in one query.
+     *
+     * `period_start` differs per task (a daily task's period is one day, a weekly
+     * task's is a Tue–Mon week), so the pairs are OR'd rather than filtered by a
+     * single date.
+     *
+     * @param  int[]  $taskIds
+     * @param  array<int, string>  $periodStarts  task id => period start date
+     * @return array<int, CleaningCompletion>
+     */
+    private function currentCompletions(int $storeId, array $taskIds, array $periodStarts): array
+    {
+        if (empty($taskIds)) {
+            return [];
+        }
+
+        return CleaningCompletion::query()
+            ->with(['employees:id,first_name,middle_name,last_name', 'attachments:id,cleaning_completion_id,path'])
+            ->where('store_id', $storeId)
+            ->whereIn('cleaning_task_id', $taskIds)
+            ->where(function ($q) use ($periodStarts) {
+                foreach ($periodStarts as $taskId => $start) {
+                    $q->orWhere(fn ($w) => $w
+                        ->where('cleaning_task_id', $taskId)
+                        ->whereDate('period_start', $start));
+                }
+            })
+            ->get()
+            ->keyBy('cleaning_task_id')
+            ->all();
+    }
+
+    /**
+     * How many completions each task has ever had, in one grouped query.
+     *
+     * This is what `has_history` is built from. The client used to call
+     * /tasks/{task}/history once per task just to find out whether the history
+     * icon should be rendered — N requests, each one deriving a full history
+     * payload (completions plus computed overdue periods) to answer a boolean.
+     *
+     * @param  int[]  $taskIds
+     * @return array<int, int>
+     */
+    private function completionCounts(int $storeId, array $taskIds): array
+    {
+        if (empty($taskIds)) {
+            return [];
+        }
+
+        return CleaningCompletion::query()
+            ->selectRaw('cleaning_task_id, COUNT(*) as aggregate')
+            ->where('store_id', $storeId)
+            ->whereIn('cleaning_task_id', $taskIds)
+            ->groupBy('cleaning_task_id')
+            ->pluck('aggregate', 'cleaning_task_id')
+            ->all();
     }
 
     /**
@@ -117,16 +195,18 @@ class CleaningDueService
         return $days;
     }
 
-    private function itemFor(CleaningTask $task, int $storeId, Carbon $date): array
-    {
+    /**
+     * One row of the due list. Both completion lookups are passed in already
+     * loaded — this method runs no queries, so the list costs a fixed number of
+     * queries regardless of how many tasks a store has.
+     */
+    private function itemFor(
+        CleaningTask $task,
+        Carbon $date,
+        ?CleaningCompletion $completion,
+        int $completionsCount,
+    ): array {
         [$periodStart, $periodEnd] = $this->schedule->periodBounds($task, $date);
-
-        $completion = CleaningCompletion::query()
-            ->with(['employees:id,first_name,middle_name,last_name', 'attachments:id,cleaning_completion_id,path'])
-            ->where('cleaning_task_id', $task->id)
-            ->where('store_id', $storeId)
-            ->whereDate('period_start', $periodStart->toDateString())
-            ->first();
 
         $status = $this->status($completion, $periodEnd);
 
@@ -147,6 +227,22 @@ class CleaningDueService
             'has_photo'      => $completion ? $completion->attachments->isNotEmpty() : false,
             'photos'         => $completion ? $this->photoUrls($completion) : [],
             'note'           => $completion?->note,
+
+            // Lets the client decide whether to offer the history view WITHOUT
+            // calling /tasks/{task}/history for every task just to find out.
+            //
+            // NOTE the precise meaning: this counts recorded completions. The
+            // history endpoint additionally derives "overdue" periods, which have
+            // no row anywhere — so a task never completed but overdue for weeks
+            // reports has_history = false while /history would still return
+            // entries for it. `started_at_or_before_period` is included so a
+            // client that wants "is there anything to look at" can widen the test
+            // without another request.
+            'has_history'                => $completionsCount > 0,
+            'completions_count'          => $completionsCount,
+            'started_at_or_before_period' => $task->starts_at
+                ? $task->starts_at->copy()->startOfDay()->lte($periodStart)
+                : false,
         ];
     }
 

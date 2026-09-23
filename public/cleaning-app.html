@@ -74,15 +74,54 @@
   table.eval-grid th.store-h{background:var(--ink);color:#fff}table.eval-grid td.store-c{background:#fff;font-weight:700}
   .ic{cursor:pointer;text-align:center;font-size:11.5px;font-weight:700;padding:9px 8px;min-width:70px;user-select:none}
   .ic.pass{color:var(--pass);background:var(--pass-bg)}.ic.fail{color:var(--fail);background:var(--fail-bg)}.ic.auto_fail{color:var(--auto);background:var(--auto-bg)}.ic.empty{color:#b0b0a8;background:#faf9f5}
+  /* not_applicable is deliberately neutral-grey, NOT red: it is excluded from the score, it is not a failure. */
+  .ic.not_applicable{color:#6b7280;background:#f1f3f5;font-style:italic}
   .ic:hover{outline:2px solid var(--brand);outline-offset:-2px}
   .colh{position:relative}.colh .del{position:absolute;top:1px;right:2px;font-size:9px;color:#c0392b;opacity:0;cursor:pointer;font-weight:700}.colh:hover .del{opacity:1}
+  .colh .colname{cursor:pointer}.colh .colname:hover{text-decoration:underline}
+  .wbadge{display:inline-block;margin-left:4px;padding:0 4px;border-radius:8px;background:var(--head,#1e4d3b);color:#fff;font-size:9px;font-weight:700;vertical-align:middle}
   th.cc-super{background:var(--brand)!important;color:#fff;font-size:12px}th.cc-freq{background:var(--brand-soft)!important;color:var(--brand);min-width:150px}
   td.cc-cell{vertical-align:top;padding:6px;background:#fff;min-width:150px}
   .tk{display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:7px;padding:6px 8px;margin-bottom:6px;background:#fff;cursor:pointer}
   .tk:hover{border-color:var(--brand)}.tk .tkname{flex:1;font-size:12px;font-weight:600}
   .tk .tkw{font-size:10px;font-weight:700;color:#4d5a52;background:#eef0ec;border-radius:5px;padding:1px 5px}
   .tk .tkv{font-size:10px;font-weight:700;border-radius:5px;padding:2px 6px}
-  .tk.pass{border-color:var(--pass);background:var(--pass-bg)}.tk.fail{border-color:var(--fail);background:var(--fail-bg)}.tk.auto_fail{border-color:var(--auto);background:var(--auto-bg)}
+  .tk.pass{border-color:var(--pass);background:var(--pass-bg)}.tk.fail{border-color:var(--fail);background:var(--fail-bg)}
+  .tk.not_applicable{border-color:#c7ccd1;background:#f1f3f5;color:#6b7280;font-style:italic}
+  .tkboost{margin-left:3px;color:var(--pass);font-weight:700;font-size:9px}
+  .tk.absent{border-style:dashed;background:#fafafa;color:#9aa0a6;cursor:default;opacity:.85}
+  .tk.absent .tkv{font-size:9px;font-style:italic}
+  .tk.absent{cursor:pointer}.tk.absent:hover{border-color:var(--head,#1e4d3b);background:#f2f5f4}
+  .tk.absent.allocated{border-style:solid;background:#f0f5f2}
+  /* Locked = the store has not marked this task complete, so it cannot be
+     passed. Hatched, so it reads as "blocked" and not as a normal fail.
+     Two flavours, because they mean different things:
+       .locked  the deadline passed — auto-failed        (red)
+       .waiting the period is still open — nothing failed yet (amber) */
+  .tk.locked{background:repeating-linear-gradient(135deg,#fff5f5,#fff5f5 5px,#ffecec 5px,#ffecec 10px);border-color:#f3c9c9;cursor:not-allowed}
+  .tk.locked .tkname::before{content:'🔒 ';font-size:9px}
+  .tk.waiting{background:repeating-linear-gradient(135deg,#fffdf3,#fffdf3 5px,#fdf6e0 5px,#fdf6e0 10px);border-color:#ecdda6;cursor:not-allowed}
+  .tk.waiting .tkname::before{content:'⏳ ';font-size:9px}
+  .tk{position:relative}
+  .tk .tksys{font-size:8px;font-weight:700;color:#c05252;text-transform:uppercase;letter-spacing:.3px}
+  .autobadge{display:inline-block;margin-top:3px;font-size:9.5px;font-weight:700;color:#c05252;background:#fdeaea;border-radius:4px;padding:1px 5px}
+  /* Copy-split modal */
+  .cpstores{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px;max-height:210px;overflow:auto;margin-top:8px}
+  .cpstore{display:flex;align-items:center;gap:7px;border:1px solid var(--line);border-radius:8px;padding:7px 9px;font-size:12.5px;cursor:pointer}
+  .cpstore.on{border-color:var(--head,#1e4d3b);background:#f0f5f2;font-weight:600}
+  .cpstore.dis{opacity:.45;cursor:not-allowed}
+  .cpres{margin-top:12px;font-size:12.5px;max-height:200px;overflow:auto}
+  .cprow{display:flex;gap:8px;padding:6px 0;border-bottom:1px solid var(--line)}
+  .cprow .ok{color:var(--pass);font-weight:700}
+  .cprow .no{color:var(--muted)}
+  #allocRows td{padding:6px 4px;border-bottom:1px solid var(--line)}
+  #allocRows input{width:70px}
+  #allocRows .becomes{font-weight:700}
+  .compbar{position:relative;margin-top:5px;height:12px;border-radius:6px;background:#ececec;overflow:hidden;font-size:9px}
+  .compbar .compfill{position:absolute;left:0;top:0;bottom:0;background:#cfd8dc}
+  .compbar.ok .compfill{background:var(--pass-bg)}.compbar.warn .compfill{background:#ffe0b2}
+  .compbar .comptxt{position:relative;display:block;text-align:center;line-height:12px;color:#5f6368;font-weight:700}
+  tr.row-locked{background:#fbfbf9}tr.row-locked .ic,tr.row-locked .tk{cursor:not-allowed;opacity:.75}
   .cc-empty{font-size:11px;color:#c0c5be;text-align:center;padding:8px}
   .cellbadge{color:var(--brand);font-size:9px;vertical-align:top;margin-left:2px}
   td.score-c{font-weight:700;text-align:center;min-width:66px}th.grp-item{background:#eef0ea!important;color:#4d5a52}
@@ -133,6 +172,12 @@
   .rp-p{background:#8ec06a}
   .rp-f{background:#e58f7c}
   .rp-e{background:#faf9f5;color:#b7b7ae}
+  /* N/A is out of the score — neutral, never the failure colour. */
+  .rp-n{background:#eceff1;color:#6b7280;font-style:italic}
+  .rp-how{font-size:9px;color:#6b6b60;margin-top:3px;text-align:center}
+  .final-c{background:#f7f9f8}.finalh{background:#14483a;color:#fff}
+  .final-how{font-size:8.5px;font-weight:600;color:var(--muted);margin-top:2px;white-space:nowrap}
+  .cm-task.n{opacity:.55;font-style:italic}
   .rp-cm .cm-head{font-weight:800}
   .rp-cm .cm-tasks{display:flex;flex-wrap:wrap;gap:3px;justify-content:center;margin-top:4px}
   .cm-task{font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;background:#fff;border:1px solid rgba(0,0,0,.15)}
@@ -168,7 +213,10 @@
         </div>
       </div>
     </div>
-    <div class="foot">Live tester · talks to /api</div>
+    <!-- This page is served straight out of public/ with no cache headers, so a
+         plain reload can silently keep an old copy. Bump this when the JS changes;
+         if the footer does not match what you expect, hard-reload (Ctrl+Shift+R). -->
+    <div class="foot">Live tester · talks to /api · build 2026-09-01e</div>
   </aside>
 
   <div class="main">
@@ -186,12 +234,12 @@
       <div class="f" style="flex:1;min-width:200px"><label>API base URL</label><input id="baseUrl"></div>
       <div class="f" style="flex:2;min-width:220px"><label>Bearer token</label><input id="token" placeholder="paste token (blank = expect 401)"></div>
       <div class="f" style="width:80px"><label>Store id</label><input id="storeId" value="1"></div>
-      <div class="f" style="width:130px"><label>Date (due)</label><input id="dueDate" type="date"></div>
+      <div class="f" style="width:130px"><label title="Only the Tasks page uses this — NOT the evaluation grid">Date · Tasks page</label><input id="dueDate" type="date" onchange="onDueDateChange()"></div>
       <div class="f" style="width:110px"><label>Eval period type</label>
         <select id="periodType" onchange="onPeriodTypeChange()"><option value="week">Week</option><option value="date">Date</option></select>
       </div>
-      <div class="f" style="width:150px"><label>Period</label>
-        <select id="periodKey" onchange="reloadView()"></select>
+      <div class="f" style="width:150px"><label title="THIS is what the evaluation grid reads">◀ Eval period</label>
+        <select id="periodKey" onchange="onPeriodKeyChange()"></select>
       </div>
       <div class="f"><label>&nbsp;</label><button class="btn sm pri" onclick="reloadView()">↻ Reload</button></div>
       <div class="f"><label>&nbsp;</label><span><span class="dot" id="connDot"></span> <span id="connTxt">idle</span></span></div>
@@ -252,7 +300,9 @@
           <div class="hd"><h3>Evaluation Chart</h3><div class="spacer"></div>
             <div class="additem">
               <input id="newItem" placeholder="New item (e.g. Parking)" onkeydown="if(event.key==='Enter')addItem()">
+              <input id="newItemWeight" type="number" min="1" max="100" value="1" title="Weight (1–100). 1 = counts the same as every other item." style="width:58px">
               <button class="btn pri sm" onclick="addItem()">＋ Add item</button>
+              <button class="btn sm" onclick="openScoring()" title="How the final score is calculated">⚙ Scoring</button>
               <button class="btn sm" onclick="exportCSV()">⤓ CSV</button>
               <div class="dropwrap">
                 <button class="btn sm" onclick="toggleReportMenu(event)">🖼 Report ▾</button>
@@ -264,8 +314,11 @@
               </div>
             </div>
           </div>
-          <div class="note">Click an item cell to cycle Pass→Fail→Auto→Empty (saves to API). Click a chart task to toggle Pass/Fail. Scores are read from the API.</div>
-          <div class="legend"><span><i style="background:var(--pass-bg);border:1px solid var(--pass)"></i>Pass</span><span><i style="background:var(--fail-bg);border:1px solid var(--fail)"></i>Fail</span><span><i style="background:var(--auto-bg);border:1px solid var(--auto)"></i>Auto Fail</span></div>
+          <div class="note"><b>Items:</b> click a cell to open the grade popup (verdict + notice + photos). <b>Chart tasks:</b> click to cycle Pass → Fail → N/A → clear (tasks have no Auto Fail). <b>N/A</b> takes a task out of the score without counting as a failure; <b>clear</b> erases the cell, its notice and its photos. Scores come from the API.
+            <br>⏳ <b>Amber task = the store has not marked it complete, and the period is still open.</b> The cell is <b>read-only</b> — there is no work to judge — but nothing is failed yet, because the store still has time.
+            <br>🔒 <b>Red hatched task = never marked complete and the deadline passed</b>, so it is failed automatically (<span class="tksys" style="font-size:9px">auto</span>). Both are read-only: the auditor cannot pass, fail or N/A a task the store never did. One completion in the period unlocks it.
+            <br>📋 <b>Dashed task = not due this period</b> — click it to distribute its weight, then use <b>Copy to other stores</b> in that popup to apply the same split elsewhere in one button.</div>
+          <div class="legend"><span><i style="background:var(--pass-bg);border:1px solid var(--pass)"></i>Pass</span><span><i style="background:var(--fail-bg);border:1px solid var(--fail)"></i>Fail</span><span><i style="background:var(--auto-bg);border:1px solid var(--auto)"></i>Auto Fail</span><span><i style="background:#f1f3f5;border:1px solid #c7ccd1"></i>N/A <span class="hint">— not scored</span></span><span><i style="background:#faf9f5;border:1px dashed #c7ccd1"></i>Not graded <span class="hint">— blocks Finalize</span></span></div>
           <div class="matrix-wrap"><table class="eval-grid" id="evalGrid"></table></div>
         </div>
       </section>
@@ -326,6 +379,127 @@
   <div class="rpt-modal-ft"><div class="spacer"></div><button class="btn" onclick="closeGrade()">Cancel</button><button class="btn pri" onclick="saveGrade()">✓ Save evaluation</button></div>
 </div>
 
+<!-- WEIGHT ALLOCATION — hand an absent task's weight to the tasks that ARE in
+     play this period. Splitting it EVENLY changes no score (earned and total
+     scale by the same factor), so the value is entirely in an uneven, deliberate
+     split. That is why there is no "auto split" button here. -->
+<div class="overlay" id="allocOverlay" onclick="closeAllocation()"></div>
+<div class="rpt-modal" id="allocModal" style="width:560px">
+  <div class="rpt-modal-hd"><div><h3 id="allocTitle">Distribute weight</h3><small id="allocSub" style="color:var(--muted)"></small></div><button class="x" onclick="closeAllocation()">×</button></div>
+  <div class="rpt-modal-bd" style="background:#fff">
+    <div id="allocHint" class="note" style="margin-bottom:14px"></div>
+    <table style="width:100%;font-size:13px">
+      <thead><tr style="text-align:left;color:var(--muted);font-size:11px">
+        <th style="padding:4px 0">TASK</th><th style="width:70px">NOW</th><th style="width:90px">GIVE</th><th style="width:70px">BECOMES</th>
+      </tr></thead>
+      <tbody id="allocRows"></tbody>
+    </table>
+    <div id="allocSum" style="margin-top:12px;font-size:13px;font-weight:700"></div>
+    <div id="allocPreview" style="background:#f5f7f6;border-radius:8px;padding:10px 12px;font-size:12.5px;margin-top:10px"></div>
+    <div id="allocError" style="color:var(--fail);font-size:12.5px;font-weight:600;margin-top:10px"></div>
+  </div>
+  <div class="rpt-modal-ft">
+    <button class="btn" id="allocResetBtn" onclick="resetAllocation()">↺ Reset</button>
+    <button class="btn" id="allocCopyBtn" onclick="openCopySplit()" title="Apply this store's whole split to other stores">⧉ Copy to other stores</button>
+    <button class="btn" id="allocRemoveBtn" onclick="openRemoveSplit()" title="Clear saved distributions across stores — the undo for a wrong copy">🗑 Remove from stores</button>
+    <div class="spacer"></div>
+    <button class="btn" onclick="closeAllocation()">Cancel</button>
+    <button class="btn pri" id="allocSaveBtn" onclick="saveAllocation()">✓ Save split</button>
+  </div>
+</div>
+
+<!-- SCORING SETTINGS — the two halves of the final score, editable at runtime.
+     These live in the cleaning_settings TABLE, so changing a share here takes
+     effect immediately: no code edit, no deploy, no restart. -->
+<div class="overlay" id="scoringOverlay" onclick="closeScoring()"></div>
+<div class="rpt-modal" id="scoringModal" style="width:520px">
+  <div class="rpt-modal-hd"><div><h3>Scoring settings</h3><small style="color:var(--muted)">How the final score is calculated</small></div><button class="x" onclick="closeScoring()">×</button></div>
+  <div class="rpt-modal-bd" style="background:#fff">
+
+    <div class="field" style="margin-bottom:16px">
+      <label>Formula</label>
+      <div class="seg" id="scFormulaSeg" style="margin-top:6px"></div>
+      <div class="hint" id="scFormulaHint" style="margin-top:6px"></div>
+    </div>
+
+    <div class="field" style="margin-bottom:6px">
+      <label>Split between the two halves</label>
+      <div style="display:flex;gap:12px;align-items:flex-end;margin-top:8px">
+        <div style="flex:1">
+          <div class="hint">Inspection items</div>
+          <input type="number" id="scItems" min="0" max="100" oninput="onScoringShareChange('items')" style="width:100%">
+        </div>
+        <div style="flex:1">
+          <div class="hint">Cleaning chart</div>
+          <input type="number" id="scChart" min="0" max="100" oninput="onScoringShareChange('chart')" style="width:100%">
+        </div>
+      </div>
+      <div id="scSum" style="margin-top:8px;font-size:12px;font-weight:700"></div>
+    </div>
+
+    <div class="hint" style="margin-bottom:16px">50 / 50 is the plain average the client asked for. The two must total 100.</div>
+
+    <!-- The completion gate. A master switch on purpose: if a client's stores
+         log far less reliably than they believe, the rule can be lifted from
+         here instead of under deploy pressure. -->
+    <div class="field" style="margin-bottom:16px;border-top:1px solid var(--line);padding-top:16px">
+      <label>Evaluation requires completion</label>
+      <div class="seg" id="scGateSeg" style="margin-top:6px"></div>
+      <div class="hint" style="margin-top:6px">When ON, a chart task the store never marked complete is <b>read-only</b> — the auditor cannot pass, fail or N/A it — and it is failed automatically once its deadline passes. OFF restores the old behaviour exactly.</div>
+    </div>
+
+    <div class="field" id="scRuleWrap" style="margin-bottom:16px">
+      <label>What counts as "done" in one period</label>
+      <div class="seg" id="scRuleSeg" style="margin-top:6px"></div>
+      <div style="display:flex;gap:10px;align-items:center;margin-top:8px" id="scThreshWrap">
+        <span class="hint">At least</span>
+        <input type="number" id="scThresh" min="1" max="100" style="width:80px" oninput="onScoringThreshChange()">
+        <span class="hint">% of the occurrences owed</span>
+      </div>
+      <div class="hint" style="margin-top:6px"><b>Marked complete once</b> is the normal setting: the store did the task, so the auditor can evaluate it. The stricter options exist only if you ever want to require a daily task to be marked on <b>every</b> day of the week. Either way, a task is only <b>failed</b> once its deadline has passed.</div>
+    </div>
+
+    <div id="scPreview" style="background:#f5f7f6;border-radius:8px;padding:10px 12px;font-size:12.5px"></div>
+    <div id="scError" style="color:var(--fail);font-size:12.5px;font-weight:600;margin-top:12px"></div>
+    <div class="hint" style="margin-top:12px">🔒 Super Admin only. Evaluations that are already finalized keep the scores they were finalized with — changing this never rewrites a report that has been sent.</div>
+  </div>
+  <div class="rpt-modal-ft"><div class="spacer"></div><button class="btn" onclick="closeScoring()">Cancel</button><button class="btn pri" id="scSaveBtn" onclick="saveScoring()">✓ Save settings</button></div>
+</div>
+
+<!-- COPY SPLIT — the client's "one button": take the weight distribution built on
+     THIS store and apply it to the stores chosen, for the SAME period.
+     Preview first (dry_run) — it is a bulk write across stores, and a store whose
+     evaluation is already finalized has to be skipped rather than rewritten. -->
+<div class="overlay" id="cpOverlay" onclick="closeCopySplit()"></div>
+<div class="rpt-modal" id="cpModal" style="width:560px">
+  <div class="rpt-modal-hd"><div><h3 id="cpTitle">Copy split to other stores</h3><small id="cpSub" style="color:var(--muted)"></small></div><button class="x" onclick="closeCopySplit()">×</button></div>
+  <div class="rpt-modal-bd" style="background:#fff">
+    <div id="cpHint" class="note" style="margin-bottom:10px"></div>
+    <!-- Remove only: narrow the delete to the one task whose window was opened,
+         instead of clearing the store's whole distribution. -->
+    <div class="field" id="cpScopeWrap" style="margin-bottom:10px;display:none">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+        <input type="checkbox" id="cpScopeOnly" onchange="onCpScopeChange()">
+        <span id="cpScopeLabel"></span>
+      </label>
+    </div>
+    <div class="field">
+      <label id="cpStoresLabel">Copy to <span class="hint">(the source store is not listed)</span></label>
+      <div class="cpstores" id="cpStores"></div>
+      <div style="margin-top:8px"><button class="btn sm" onclick="cpToggleAll(true)">Select all</button>
+        <button class="btn sm" onclick="cpToggleAll(false)">Clear</button></div>
+    </div>
+    <div class="cpres" id="cpResults"></div>
+    <div id="cpError" style="color:var(--fail);font-size:12.5px;font-weight:600;margin-top:10px"></div>
+  </div>
+  <div class="rpt-modal-ft">
+    <div class="spacer"></div>
+    <button class="btn" onclick="closeCopySplit()">Cancel</button>
+    <button class="btn" id="cpPreviewBtn" onclick="previewCopySplit()">👁 Preview</button>
+    <button class="btn pri" id="cpApplyBtn" onclick="applyCopySplit()">⧉ Copy now</button>
+  </div>
+</div>
+
 <!-- ITEM DETAILS MODAL — read-only, opened by clicking a row on "My Store Items" -->
 <div class="overlay" id="itemDetailsOverlay" onclick="closeItemDetails()"></div>
 <div class="rpt-modal" id="itemDetailsModal" style="width:480px">
@@ -355,50 +529,112 @@ const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const cfg={ base:()=>$('#baseUrl').value.replace(/\/$/,''), token:()=>$('#token').value.trim(),
   store:()=>$('#storeId').value.trim(), period:()=>({period_type:$('#periodType').value,period_key:$('#periodKey').value.trim()}) };
 
-/* ---------------- PERIOD PICKER (date dropdown for the evaluation page) ---------------- */
-// ISO-8601 week: Thursday of the same week decides the week-year; week 1 contains the year's first Thursday.
-function isoWeekKey(dateStr){
-  const d=new Date(dateStr+'T00:00:00');
-  const day=(d.getUTCDay()+6)%7; // 0=Mon..6=Sun
-  d.setUTCDate(d.getUTCDate()-day+3); // nearest Thursday
-  const firstThu=new Date(Date.UTC(d.getUTCFullYear(),0,4));
-  const firstThuDay=(firstThu.getUTCDay()+6)%7;
-  firstThu.setUTCDate(firstThu.getUTCDate()-firstThuDay+3);
-  const week=1+Math.round((d-firstThu)/(7*24*3600*1000));
-  return `${d.getUTCFullYear()}-W${String(week).padStart(2,'0')}`;
-}
+/* ---------------- PERIOD PICKER (served by the API) ---------------- */
+// The period list comes from GET /cleaning/periods. This page used to build week
+// keys itself from the ISO week number, which looks correct for every week of
+// 2026 — accounting week N and ISO week N coincide all year — and then silently
+// breaks: Tuesday 2026-12-29 opens accounting week 2027-W01 while ISO calls it
+// 2026-W53, so that week's evaluation would be filed under an unreachable key.
+//
+// The business calendar is Little Caesars': 13 periods x 4 weeks, Tue -> Mon.
+// Only the server knows it, so only the server generates the keys.
 function todayISO(){const d=new Date();return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10);}
 
-// Builds the list of selectable periods, newest first. Week type: current
-// week plus 4 weeks back / 4 weeks ahead. Date type: today plus 14 days back.
-function buildPeriodOptions(type){
-  const opts=[]; const today=new Date(todayISO()+'T00:00:00');
-  if(type==='week'){
-    for(let i=4;i>=-4;i--){
-      const d=new Date(today); d.setUTCDate(d.getUTCDate()-i*7);
-      const key=isoWeekKey(d.toISOString().slice(0,10));
-      if(!opts.some(o=>o.value===key)) opts.push({value:key,label:key});
-    }
-  } else {
-    for(let i=0;i<=14;i++){
-      const d=new Date(today); d.setUTCDate(d.getUTCDate()-i);
-      const key=d.toISOString().slice(0,10);
-      opts.push({value:key,label:key});
-    }
+// /cleaning/periods sits behind the auth middleware, so on a cold page load —
+// before a token is pasted — it 401s and the dropdown stays empty. Anything that
+// then sends period_key='' gets a 422 back. So: no period key, no request.
+function hasPeriod(){ return !!$('#periodKey').value.trim(); }
+
+// Call at the top of anything that needs a period. Never fires a request that is
+// guaranteed to 422; instead it tries ONCE to fetch the list — the usual reason
+// the list is empty is that /periods 401'd before a token was pasted, and by the
+// time the user clicks something a token often exists. Only if that still comes
+// back empty does it give up and explain itself.
+let PERIOD_FETCH=null;
+async function ensurePeriod(targetSelector){
+  if(hasPeriod()) return true;
+
+  // Share one in-flight request so N guarded callers don't fire N fetches.
+  if(!PERIOD_FETCH) PERIOD_FETCH=populatePeriodKeyOptions().finally(()=>{PERIOD_FETCH=null;});
+  await PERIOD_FETCH;
+
+  return requirePeriod(targetSelector);
+}
+
+function requirePeriod(targetSelector){
+  if(hasPeriod()) return true;
+  const msg='No period selected — paste a bearer token above, then press ↻ Reload.';
+  const el=targetSelector&&$(targetSelector);
+  if(el){
+    // The targets are a mix of <table>, <tbody> and <div>; a bare <div> inside a
+    // table is dropped by the parser, so match the element we were handed.
+    const tag=el.tagName;
+    el.innerHTML=(tag==='TBODY'||tag==='TABLE')
+      ? `<tr><td colspan="12" class="rolegate">${msg}</td></tr>`
+      : `<div class="rolegate">${msg}</div>`;
   }
-  return opts;
+  return false;
 }
-function currentPeriodKey(type){ return type==='week' ? isoWeekKey(todayISO()) : todayISO(); }
-function populatePeriodKeyOptions(preferredValue){
+
+async function populatePeriodKeyOptions(preferredValue){
   const type=$('#periodType').value;
-  const opts=buildPeriodOptions(type);
-  const cur=currentPeriodKey(type);
-  const keep = (preferredValue && opts.some(o=>o.value===preferredValue)) ? preferredValue
-             : (opts.some(o=>o.value===cur) ? cur : opts[opts.length-1].value);
-  $('#periodKey').innerHTML=opts.map(o=>`<option value="${o.value}"${o.value===keep?' selected':''}>${o.label}</option>`).join('');
+  const sel=$('#periodKey');
+  const keepCurrent=preferredValue||sel.value;
+  const r=await api('GET','/cleaning/periods',{query:{type,around:todayISO()}});
+
+  const opts=(r.ok && r.data && Array.isArray(r.data.options))
+    ? r.data.options.map(o=>({value:o.key,label:o.label||o.key}))
+    : [];
+
+  if(!opts.length){
+    // Never guess a key locally as a fallback: an ISO week number matches the
+    // accounting one for all of 2026 and then silently diverges on 2026-12-29,
+    // which would file that week under a key the backend cannot resolve.
+    sel.innerHTML='<option value="">— no period (connect first) —</option>';
+    return false;
+  }
+
+  const keep = opts.some(o=>o.value===keepCurrent) ? keepCurrent
+             : (opts.some(o=>o.value===r.data.current) ? r.data.current : opts[opts.length-1].value);
+  sel.innerHTML=opts.map(o=>`<option value="${o.value}"${o.value===keep?' selected':''}>${o.label}</option>`).join('');
+  return true;
 }
-function onPeriodTypeChange(){ populatePeriodKeyOptions(); reloadView(); }
-(function initPeriodPicker(){ populatePeriodKeyOptions(); })();
+
+async function onPeriodTypeChange(){ await populatePeriodKeyOptions(); syncDueDateFromPeriod(); reloadView(); }
+
+/* The page has TWO date controls and they used to look interchangeable:
+   "Date · Tasks page" (#dueDate) drives the Tasks/Due screen, while the
+   evaluation grid reads ONLY the "Eval period" dropdown (#periodKey). Changing
+   the first one and expecting the grid to move is the obvious mistake — it looks
+   like the main date field and does nothing to the evaluation.
+
+   So while period type = Date the two are kept in sync in both directions. In
+   Week mode they are genuinely different things and are left alone. */
+function onPeriodKeyChange(){ syncDueDateFromPeriod(); reloadView(); }
+
+function syncDueDateFromPeriod(){
+  if($('#periodType').value!=='date') return;
+  const key=$('#periodKey').value.trim();
+  if(/^\d{4}-\d{2}-\d{2}$/.test(key)) $('#dueDate').value=key;
+}
+
+async function onDueDateChange(){
+  const d=$('#dueDate').value;
+  if($('#periodType').value==='date' && d){
+    const sel=$('#periodKey');
+    // The dropdown only offers a few days either side of today; if the picked
+    // date is outside that window, add it rather than silently ignoring it.
+    if(![...sel.options].some(o=>o.value===d)){
+      sel.insertAdjacentHTML('beforeend',`<option value="${d}">${d}</option>`);
+    }
+    sel.value=d;
+  }
+  reloadView();
+}
+
+// Pasting a token (or pointing at another server) is what makes /periods
+// reachable, so refill the dropdown when either changes.
+async function onConnectionChange(){ await populatePeriodKeyOptions(); syncDueDateFromPeriod(); reloadView(); }
 
 function toast(msg,err){const d=document.createElement('div');d.className='tmsg'+(err?' err':'');d.textContent=msg;$('#toast').appendChild(d);setTimeout(()=>d.remove(),4500);}
 function conn(ok){$('#connDot').className='dot'+(ok?' ok':'');$('#connTxt').textContent=ok?'connected':'error';}
@@ -437,7 +673,9 @@ async function loadDue(){
       <td><div class="win">${period}</div></td>
       <td><span class="st-pill st-${stCls(it.status)}">${it.status}</span></td>
       <td style="white-space:nowrap">
-        <button class="btn link" onclick="openHistory(${i})">History</button>
+        ${it.has_history
+          ? `<button class="btn link" onclick="openHistory(${i})">History (${it.completions_count})</button>`
+          : `<button class="btn link" onclick="openHistory(${i})" style="opacity:.45" title="No completions recorded yet — /history may still show overdue periods">History</button>`}
         ${it.task_id?`<button class="btn link" onclick="quickEvaluateDue(${i})">📋 Evaluate</button>`:''}
         ${done?`<button class="btn link" onclick="undo(${i})">Undo</button>`:`<button class="btn link" onclick="openComplete(${i})">Complete</button>`}
       </td></tr>`;
@@ -566,9 +804,29 @@ async function saveTask(){
 
 /* ---------------- EVALUATION ---------------- */
 let GEVAL=null;
-const LBL={pass:'Pass',fail:'Fail',auto_fail:'Auto',empty:'–'};
+const LBL={pass:'Pass',fail:'Fail',auto_fail:'Auto',not_applicable:'N/A',empty:'–'};
 function scColor(p){return p>=70?'var(--pass)':p>=40?'var(--pend)':'var(--fail)';}
+
+// One decimal, always. The client checks (items + chart) / 2 by hand off the
+// screen; printing 25% and 67% when the server averaged 25.0 and 66.7 makes a
+// correct number look like a bug.
+function pct1(v){ return (v===null||v===undefined) ? '—' : Number(v).toFixed(1)+'%'; }
+
+// The final score, plus the arithmetic that produced it — so nobody has to ask
+// where the number came from.
+function finalCell(row){
+  const v=row.final_score;
+  if(v===null||v===undefined) return `<td class="score-c final-c" title="Nothing graded yet">—</td>`;
+
+  let how;
+  if((row.score_sides||[]).length===1)        how=row.score_sides[0]==='items'?'items only (no chart tasks)':'chart only (no items)';
+  else how=`(${pct1(row.item_score)} + ${pct1(row.chart_score)}) ÷ 2`;
+
+  return `<td class="score-c final-c" style="color:${scColor(v)}" title="${how}${row.score_frozen?' · frozen at finalize':''}">
+    ${pct1(v)}<div class="final-how">${how}</div></td>`;
+}
 async function loadEval(){
+  if(!await ensurePeriod('#evalGrid')) return;
   const r=await api('GET','/cleaning/evaluations',{query:cfg.period()});
   if(!r.ok){$('#evalGrid').innerHTML='';return;}
   GEVAL=r.data; renderEval();
@@ -577,8 +835,16 @@ function renderEval(){
   const items=GEVAL.items||[], rows=GEVAL.rows||[], FREQS=['daily','weekly','monthly','hourly'];
   const head=`<thead>
     <tr><th class="store-h" rowspan="2">Store</th><th class="grp-item" colspan="${items.length||1}">Inspection Items</th>
-    <th class="grp-item" rowspan="2">Item<br>Score</th><th class="cc-super" colspan="4">Cleaning Chart</th><th class="cc-super" rowspan="2">Chart<br>Score</th><th class="grp-item" rowspan="2">Notify</th></tr>
-    <tr>${items.map(it=>`<th class="colh">${it.name}<span class="del" title="remove" onclick="delItem(${it.id})">✕</span></th>`).join('')||'<th></th>'}
+    <th class="grp-item" rowspan="2">Item<br>Score</th><th class="cc-super" colspan="4">Cleaning Chart</th><th class="cc-super" rowspan="2">Chart<br>Score</th><th class="grp-item finalh" rowspan="2">Final<br>Score</th><th class="grp-item" rowspan="2">Notify</th></tr>
+    <tr>${items.map(it=>{
+      // Weight 1 is the default and means "same as everything else", so only show
+      // a badge once someone has actually made an item count for more.
+      const w=Number(it.weight??1);
+      const badge=w>1?`<span class="wbadge" title="weight ${w}">×${w}</span>`:'';
+      return `<th class="colh" title="Click to change weight">
+        <span class="colname" onclick="editItemWeight(${it.id})">${it.name}${badge}</span>
+        <span class="del" title="remove" onclick="delItem(${it.id})">✕</span></th>`;
+    }).join('')||'<th></th>'}
     ${FREQS.map(f=>`<th class="cc-freq">${f}</th>`).join('')}</tr></thead>`;
   const body='<tbody>'+rows.map(row=>{
     // Items (Group A): clicking a cell always opens the Evaluate popup (verdict + notice + photos).
@@ -588,35 +854,544 @@ function renderEval(){
       const badge=(cell.note||(cell.photos&&cell.photos.length))?'<span class="cellbadge" title="has notice/photos">●</span>':'';
       return `<td class="ic ${v}" onclick="openGradeFromItem(${row.store_id},${it.id})">${LBL[v]}${badge}</td>`;}).join('');
     // Chart tasks (Group B): quick click-to-toggle pass/fail, same as always — no popup.
+    const absentByFreq=(row.absent_tasks||[]).reduce((m,a)=>{(m[a.frequency]=m[a.frequency]||[]).push(a);return m;},{});
     const freqCells=FREQS.map(f=>{const list=(row.chart&&row.chart[f])||[];
-      if(!list.length) return '<td class="cc-cell"><div class="cc-empty">—</div></td>';
-      return `<td class="cc-cell">${list.map(t=>{const v=t.verdict||'ungraded';const cls=t.verdict||'';
-        return `<div class="tk ${cls}" onclick="toggleCC(${row.store_id},${t.task_id},'${t.verdict||''}')"><div class="tkname">${t.name}</div><span class="tkw">${t.weight}</span><span class="tkv">${t.verdict==='pass'?'P':t.verdict==='fail'?'F':t.verdict==='auto_fail'?'AF':'·'}</span></div>`;}).join('')}</td>`;}).join('');
-    return `<tr><td class="store-c">${row.store}<div style="font-size:10px;color:var(--muted)">#${row.store_id}</div></td>
-      ${itemCells}<td class="score-c" style="color:${scColor(row.item_score)}">${row.item_score}%</td>
-      ${freqCells}<td class="score-c" style="color:${scColor(row.chart_score)}">${row.chart_score}%${row.weight_lost?`<div style="font-size:10px;color:var(--fail)">−${row.weight_lost}</div>`:''}</td>
-      <td style="text-align:center;white-space:nowrap"><button class="btn link" onclick="openStoreDetails(${row.store_id})">👁 Details</button> <button class="btn link" onclick="finalizeStore(${row.store_id})">✓ Finalize</button></td></tr>`;
+      const absent=(absentByFreq[f]||[]).map(a=>`<div class="tk absent${a.unallocated?'':' allocated'}" title="Not due this period — its ${a.weight} weight is out of play. ${a.unallocated?a.unallocated+' still unallocated. Click to distribute.':'Fully allocated. Click to change.'}" onclick="openAllocation(${row.store_id},${a.task_id})"><div class="tkname">${a.name}</div><span class="tkw">${a.weight}</span><span class="tkv">${a.unallocated?'distribute →':'✓ shared'}</span></div>`).join('');
+      if(!list.length && !absent) return '<td class="cc-cell"><div class="cc-empty">—</div></td>';
+      return `<td class="cc-cell">${absent}${list.map(t=>{const cls=t.verdict||'';
+        const mark=t.verdict==='pass'?'P':t.verdict==='fail'?'F':t.verdict==='not_applicable'?'N/A':'·';
+        const boost=(t.allocated_from&&t.allocated_from.length)?`<span class="tkboost" title="${t.allocated_from.map(a=>'+'+a.amount+' from '+a.name).join(', ')}">+${t.allocated_from.reduce((n,a)=>n+a.amount,0)}</span>`:'';
+        // A task the store has not marked complete is READ-ONLY: no verdict at
+        // all, so the cell gets no click handler (see below). Hatched amber while
+        // the period is still open (nothing failed yet), red once the deadline
+        // has passed (failed automatically by the system).
+        const lock=t.evaluable===false;
+        const waiting=lock && t.lock_reason==='period_not_finished';
+        const sys=(t.verdict_source==='system')?'<span class="tksys">auto</span>':'';
+        // No counts on the cell: the rule is "did the store mark it complete or
+        // not". A "1/5" badge would read as a target the store has to hit, which
+        // is not what is being measured.
+        // A locked cell is READ-ONLY: no click handler at all, because there is
+        // no verdict the auditor is allowed to set on it.
+        const tip=waiting
+          ? 'The store has not marked this complete, so it cannot be evaluated. The period is still open — the store can still do it.'
+          : lock
+            ? 'The store never marked this complete, so it cannot be evaluated. It has been failed automatically.'
+            : (t.completion_late?'Marked complete late. ':'Marked complete. ')+'Click: Pass → Fail → N/A → clear';
+        return `<div class="tk ${cls}${lock?(waiting?' waiting':' locked'):''}" title="${tip}" ${lock?'':`onclick="cycleCC(${row.store_id},${t.task_id},'${t.verdict||''}')"`}><div class="tkname">${t.name}</div><span class="tkw">${t.effective_weight??t.weight}${boost}</span><span class="tkv">${mark}${sys}</span></div>`;}).join('')}</td>`;}).join('');
+    // Completeness is the auditor's progress, deliberately separate from the
+    // store's score — and it is what gates Finalize, so it has to be visible.
+    const locked=!!row.finalized_at;
+    const comp=(row.completion_pct==null)?null:Number(row.completion_pct);
+    const compHtml=comp==null?'':`<div class="compbar ${row.is_complete?'ok':'warn'}" title="${row.is_complete?'Every cell decided':'Ungraded: '+((row.missing||[]).map(m=>m.name).join(', ')||'—')}">
+        <span class="compfill" style="width:${comp}%"></span><span class="comptxt">${row.is_complete?'complete':comp+'%'}</span></div>`;
+    // How many tasks this store is being auto-failed for, so the auditor does
+    // not have to hover every cell to find out why a score collapsed.
+    const autoHtml=row.tasks_auto_failed
+      ? `<div class="autobadge" title="${row.tasks_auto_failed} task(s) failed automatically: never marked complete by the store. ${row.tasks_not_completed} not completed in total.">⚠ ${row.tasks_auto_failed} auto-failed</div>`
+      : '';
+    return `<tr class="${locked?'row-locked':''}"><td class="store-c">${locked?'<span title="Finalized — read-only">🔒 </span>':''}${row.store}<div style="font-size:10px;color:var(--muted)">#${row.store_id}</div>${compHtml}${autoHtml}</td>
+      ${itemCells}<td class="score-c" style="color:${scColor(row.item_score)}">${pct1(row.item_score)}</td>
+      ${freqCells}<td class="score-c" style="color:${scColor(row.chart_score)}">${pct1(row.chart_score)}${row.weight_lost?`<div style="font-size:10px;color:var(--fail)">−${row.weight_lost}</div>`:''}</td>
+      ${finalCell(row)}
+      <td style="text-align:center;white-space:nowrap"><button class="btn link" onclick="openStoreDetails(${row.store_id})">👁 Details</button> ${
+        locked
+          ? `<button class="btn link" onclick="reopenStore(${row.store_id})" title="Super Admin only">↺ Reopen</button>`
+          : row.is_complete===false
+            ? `<button class="btn link" disabled style="opacity:.4;cursor:not-allowed" title="${(row.missing||[]).length} cell(s) still ungraded: ${(row.missing||[]).map(m=>m.name).join(', ')||'—'}">✓ Finalize</button>`
+            : `<button class="btn link" onclick="finalizeStore(${row.store_id})">✓ Finalize</button>`
+      }</td></tr>`;
   }).join('')+'</tbody>';
   $('#evalGrid').innerHTML=head+body;
 }
 async function finalizeStore(storeId){
+  if(!await ensurePeriod()){toast('Pick a period first',true);return;}
   if(!confirm('Finalize this store’s evaluation and notify it?'))return;
   const r=await api('POST','/cleaning/evaluations/finalize',{body:{store_id:storeId,...cfg.period()}});
-  if(r.ok) toast('Finalized — store notified ✓');
+  if(r.ok){ toast('Finalized — store notified ✓'); loadEval(); return; }
+  // 409 = the backend's completeness gate. Name the cells rather than making the
+  // auditor hunt for them.
+  if(r.status===409 && r.data && r.data.missing){
+    toast('Not finalized — still ungraded: '+r.data.missing.map(m=>m.name).join(', '),true);
+  }
 }
-async function toggleCC(storeId,taskId,cur){
-  const next=cur==='pass'?'fail':'pass';
-  const r=await api('POST','/cleaning/evaluations',{body:{store_id:storeId,...cfg.period(),kind:'chart',cleaning_task_id:taskId,verdict:next}});
-  if(r.ok) loadEval();
+
+// The lock exists so a store cannot be told one number and shown another, so
+// only a Super Admin can lift it.
+async function reopenStore(storeId){
+  if(!await ensurePeriod()){toast('Pick a period first',true);return;}
+  if(!confirm('Reopen this finalized evaluation? (Super Admin only)'))return;
+  const r=await api('POST','/cleaning/evaluations/reopen',{body:{store_id:storeId,...cfg.period()}});
+  if(r.ok){ toast('Reopened — editable again'); loadEval(); }
 }
-async function addItem(){const v=$('#newItem').value.trim();if(!v)return;const r=await api('POST','/cleaning/inspection-items',{body:{name:v}});if(r.ok){$('#newItem').value='';toast('Item added');loadEval();}}
+// The client asked for three options on a task, and a way back out of a mis-tap.
+// Chart cells stay a quick click — no modal, ever — so the click CYCLES:
+//
+//   (ungraded) → Pass → Fail → N/A → (ungraded) → …
+//
+// 'empty' is not a state, it is the eraser: it deletes the cell so it is
+// indistinguishable from one never touched.
+//
+// A task has NO auto_fail. It used to accept one, but on a chart task it was
+// arithmetically identical to `fail`, so it was removed rather than kept as a
+// state that did nothing. Inspection items still have it.
+const CC_CYCLE=['pass','fail','not_applicable','empty'];
+
+// A task the store never marked complete has NO cycle: the cell is read-only and
+// carries no click handler, because there is no verdict the auditor may set on
+// it. The system decides it instead — nothing while the deadline is open, `fail`
+// once it has passed. The server refuses every verdict on such a task (422), so
+// offering any button would only produce an error.
+async function cycleCC(storeId,taskId,cur){
+  const i=CC_CYCLE.indexOf(cur);
+  const next=CC_CYCLE[(i+1)%CC_CYCLE.length];   // unknown/'' → index -1 → 'pass'
+  await setCC(storeId,taskId,next);
+}
+
+async function setCC(storeId,taskId,verdict){
+  if(!await ensurePeriod()){toast('Pick a period first',true);return;}
+  const r=await api('POST','/cleaning/evaluations',{body:{store_id:storeId,...cfg.period(),kind:'chart',cleaning_task_id:taskId,verdict}});
+  if(r.ok){ toast(verdict==='empty'?'Cleared':LBL[verdict]); loadEval(); return; }
+  // 422 = the completion gate. Show the server's sentence — it names the task
+  // and says what to do instead.
+  if(r.status===422 && r.data && r.data.message){ toast(r.data.message,true); loadEval(); }
+}
+
+// Kept so the Due page's "Evaluate" shortcut keeps working unchanged.
+async function toggleCC(storeId,taskId,cur){ await cycleCC(storeId,taskId,cur); }
+/* ---------------- WEIGHT ALLOCATION ---------------- */
+// A task that is not due this period still has a weight. This screen hands that
+// weight to the tasks that ARE in play, and the auditor chooses the split.
+//
+// The split must add up to the absent task's weight EXACTLY — a half-allocated
+// pool is a silently wrong report, which is worse than not allocating at all.
+let ALLOC=null;   // { storeId, source, targets:[{task_id,name,base,amount,verdict}] }
+
+function openAllocation(storeId,sourceTaskId){
+  const row=(GEVAL&&GEVAL.rows||[]).find(r=>r.store_id===storeId); if(!row) return;
+  if(row.finalized_at){ toast('This evaluation is finalized — reopen it first',true); return; }
+
+  const source=(row.absent_tasks||[]).find(a=>a.task_id===sourceTaskId); if(!source) return;
+  const existing=(row.allocations||[]).filter(a=>a.source_task_id===sourceTaskId);
+
+  // Targets are the tasks actually gradable this period — anything else would
+  // make the weight vanish.
+  const targets=[];
+  ['daily','weekly','monthly','hourly'].forEach(f=>((row.chart&&row.chart[f])||[]).forEach(t=>{
+    if(t.historical) return;                       // recorded earlier, not in play
+    const found=existing.find(a=>a.target_task_id===t.task_id);
+    targets.push({task_id:t.task_id,name:t.name,freq:f,base:t.base_weight,
+                  verdict:t.verdict,amount:found?found.amount:0});
+  }));
+
+  if(!targets.length){ toast('No tasks are due this period to receive the weight',true); return; }
+
+  ALLOC={storeId,source,targets};
+  $('#allocTitle').textContent=`Distribute "${source.name}"`;
+  $('#allocSub').textContent=`${source.weight} points · store ${row.store} · ${GEVAL.period_key}`;
+  $('#allocHint').innerHTML=`<b>"${source.name}"</b> is not due this period, so its <b>${source.weight}</b> points are out of play.
+    Give them to the tasks below.
+    <br><span class="hint">Splitting evenly changes no score — earned and total scale together. Move the points where they matter.</span>`;
+  $('#allocError').textContent='';
+  $('#allocResetBtn').style.display=existing.length?'':'none';
+  renderAllocRows();
+  $('#allocOverlay').classList.add('on'); $('#allocModal').classList.add('on');
+}
+function closeAllocation(){ $('#allocOverlay').classList.remove('on'); $('#allocModal').classList.remove('on'); ALLOC=null; }
+
+function renderAllocRows(){
+  $('#allocRows').innerHTML=ALLOC.targets.map((t,i)=>{
+    const mark=t.verdict==='pass'?'<span style="color:var(--pass)">✓</span>'
+             :t.verdict==='fail'?'<span style="color:var(--fail)">✗</span>'
+             :t.verdict?'<span class="hint">'+(LBL[t.verdict]||t.verdict)+'</span>'
+             :'<span class="hint" title="Ungraded — weight moved here does nothing until it is graded">·</span>';
+    return `<tr>
+      <td>${t.name} <span class="hint">(${t.freq})</span> ${mark}</td>
+      <td>${t.base}</td>
+      <td><input type="number" min="0" value="${t.amount}" oninput="onAllocChange(${i},this.value)"></td>
+      <td class="becomes">${t.base+t.amount}</td>
+    </tr>`;
+  }).join('');
+  renderAllocSum();
+}
+
+function onAllocChange(i,v){
+  ALLOC.targets[i].amount=Math.max(0,parseInt(v,10)||0);
+  // Only the derived cells need redrawing — re-rendering the inputs would steal focus.
+  $$('#allocRows .becomes').forEach((td,n)=>td.textContent=ALLOC.targets[n].base+ALLOC.targets[n].amount);
+  renderAllocSum();
+}
+
+function renderAllocSum(){
+  const total=ALLOC.targets.reduce((n,t)=>n+t.amount,0);
+  const need=ALLOC.source.weight, ok=total===need;
+  $('#allocSum').innerHTML=ok
+    ? `<span style="color:var(--pass)">✓ ${total} of ${need} allocated</span>`
+    : `<span style="color:var(--fail)">${total} of ${need} — ${total>need?(total-need)+' too many':(need-total)+' left'}</span>`;
+  $('#allocSaveBtn').disabled=!ok;
+  $('#allocSaveBtn').style.opacity=ok?1:.45;
+
+  // Say plainly when the split will not move the number, instead of letting the
+  // auditor discover it after saving.
+  // Chart verdicts only — a task has no auto_fail.
+  const isGraded=t=>t.verdict==='pass'||t.verdict==='fail';
+  const graded=ALLOC.targets.filter(isGraded);
+  const onUngraded=ALLOC.targets.filter(t=>t.amount>0&&!isGraded(t));
+  if(!graded.length){
+    $('#allocPreview').innerHTML='⚠️ None of these tasks is graded yet, so this split will not change the score until you grade them.';
+    return;
+  }
+  const earned=graded.reduce((n,t)=>n+((t.verdict==='pass')?(t.base+t.amount):0),0);
+  const tot=graded.reduce((n,t)=>n+t.base+t.amount,0);
+  const now=tot?Math.round(earned/tot*1000)/10:0;
+  let msg=`<b>Chart score would become ${now.toFixed(1)}%</b>`;
+  if(onUngraded.length) msg+=`<br><span class="hint">⚠️ ${onUngraded.length} of these are ungraded — points given to them do nothing until graded.</span>`;
+  $('#allocPreview').innerHTML=msg;
+}
+
+async function saveAllocation(){
+  if(!ALLOC) return;   // modal closed under us (e.g. the grid reloaded)
+  const body={ store_id:ALLOC.storeId, ...cfg.period(),
+    source_task_id:ALLOC.source.task_id,
+    allocations:ALLOC.targets.filter(t=>t.amount>0).map(t=>({target_task_id:t.task_id,amount:t.amount})) };
+  const r=await api('POST','/cleaning/evaluations/allocations',{body});
+  if(r.ok){ closeAllocation(); toast('Weight distributed'); loadEval(); return; }
+  $('#allocError').textContent=briefErr(r.data);
+}
+
+async function resetAllocation(){
+  if(!ALLOC) return;   // modal closed under us (e.g. the grid reloaded)
+  const body={ store_id:ALLOC.storeId, ...cfg.period(), source_task_id:ALLOC.source.task_id };
+  const r=await api('DELETE','/cleaning/evaluations/allocations',{body});
+  if(r.ok){ closeAllocation(); toast('Split removed'); loadEval(); return; }
+  $('#allocError').textContent=briefErr(r.data);
+}
+
+/* ---------------- COPY / REMOVE SPLIT ACROSS STORES ---------------- */
+// Two operations, one modal, because they are the same shape: pick stores →
+// preview → apply.
+//
+//   COPY   the distribution built on this store, applied to the stores he picks.
+//          Nearly free, because tasks are SHARED between stores (one task row,
+//          attached to many) and `weight` lives on the task — so the amounts are
+//          already correct everywhere and nothing has to be recalculated.
+//
+//   REMOVE the undo for a copy that went to the wrong stores. Note it CLEARS
+//          rather than restores: a copy replaces whatever a store had, and we
+//          keep no snapshot of the replaced rows.
+//
+// Preview before writing, in both. These are bulk writes across stores, and some
+// stores legitimately cannot take them — an evaluation already finalized must be
+// skipped, not rewritten, or a store would be told one score and shown another.
+let CPCOPY=null;   // { mode:'copy'|'remove', sourceStoreId, targets:Set<int>, onlyTaskId:?int }
+
+// How many distinct splits a store has saved this period. Comes straight from
+// the grid row, so the picker needs no extra request.
+function storeSplitCount(row){
+  return new Set((row.allocations||[]).map(a=>a.source_task_id)).size;
+}
+
+function openCopySplit(){
+  if(!ALLOC) return;
+  const others=(GEVAL&&GEVAL.rows||[]).filter(r=>r.store_id!==ALLOC.storeId);
+  if(!others.length){ toast('No other stores in this grid to copy to',true); return; }
+
+  CPCOPY={mode:'copy',sourceStoreId:ALLOC.storeId,targets:new Set(),onlyTaskId:null};
+  const src=(GEVAL.rows||[]).find(r=>r.store_id===ALLOC.storeId);
+  $('#cpTitle').textContent='Copy split to other stores';
+  $('#cpSub').textContent=`from store ${src?src.store:ALLOC.storeId} · ${GEVAL.period_key}`;
+  $('#cpStoresLabel').innerHTML='Copy to <span class="hint">(the source store is not listed)</span>';
+  $('#cpScopeWrap').style.display='none';
+  $('#cpHint').innerHTML=`Copies <b>every</b> split saved on store <b>${src?src.store:ALLOC.storeId}</b> for
+    <b>${GEVAL.period_key}</b> — not just "${ALLOC.source.name}" — to the stores you tick.
+    <br><span class="hint">A store whose evaluation is finalized is skipped. A split whose tasks are not in play on
+    the target store is skipped, with the reason. Existing splits on a target are <b>replaced</b>.
+    <br><b>Save this split first</b> if you have unsaved changes — the copy reads what is stored, not what is on screen.</span>`;
+  $('#cpError').textContent=''; $('#cpResults').innerHTML='';
+  renderCopyStores();
+  $('#cpOverlay').classList.add('on'); $('#cpModal').classList.add('on');
+}
+
+// The undo for a copy that went to the wrong stores. Unlike copy, the store the
+// window was opened from IS listed — the auditor usually wants to clear it too.
+function openRemoveSplit(){
+  if(!ALLOC) return;
+  const withSplits=(GEVAL&&GEVAL.rows||[]).filter(r=>storeSplitCount(r)>0);
+  if(!withSplits.length){ toast('No store in this grid has a saved distribution for this period',true); return; }
+
+  CPCOPY={mode:'remove',sourceStoreId:ALLOC.storeId,targets:new Set(),onlyTaskId:null};
+  $('#cpTitle').textContent='Remove distribution from stores';
+  $('#cpSub').textContent=`${GEVAL.period_key} · ${withSplits.length} store(s) have a saved split`;
+  $('#cpStoresLabel').innerHTML='Remove from <span class="hint">(only stores that have a saved split)</span>';
+  $('#cpScopeWrap').style.display='';
+  $('#cpScopeOnly').checked=false;
+  $('#cpScopeLabel').innerHTML=`Only remove <b>"${ALLOC.source.name}"</b> — leave the store's other splits alone`;
+  $('#cpError').textContent=''; $('#cpResults').innerHTML='';
+  renderRemoveHint();
+  renderCopyStores();
+  $('#cpOverlay').classList.add('on'); $('#cpModal').classList.add('on');
+}
+
+function onCpScopeChange(){
+  CPCOPY.onlyTaskId=$('#cpScopeOnly').checked ? ALLOC.source.task_id : null;
+  $('#cpResults').innerHTML='';     // the preview is now stale
+  renderRemoveHint();
+  cpSyncButtons();
+}
+
+function renderRemoveHint(){
+  const what=CPCOPY.onlyTaskId ? `the split for <b>"${ALLOC.source.name}"</b>` : `<b>every</b> saved split`;
+  $('#cpHint').innerHTML=`Deletes ${what} on the stores you tick, for <b>${GEVAL.period_key}</b>.
+    The weight simply goes back to being out of play — the same state as never having distributed it.
+    <br><span class="hint">⚠️ This <b>clears</b>, it does not undo: if a copy replaced a store's own distribution,
+    removing will <b>not</b> bring the old one back. Stores whose evaluation is finalized are skipped.</span>`;
+}
+
+function closeCopySplit(){ $('#cpOverlay').classList.remove('on'); $('#cpModal').classList.remove('on'); CPCOPY=null; }
+
+function renderCopyStores(){
+  const remove=CPCOPY.mode==='remove';
+  // Copy: every OTHER store. Remove: only stores that actually have something
+  // to delete — offering the rest would just return "nothing_to_remove".
+  const rows=(GEVAL&&GEVAL.rows||[]).filter(r=>remove
+    ? storeSplitCount(r)>0
+    : r.store_id!==CPCOPY.sourceStoreId);
+  $('#cpStores').innerHTML=rows.map(r=>{
+    const fin=!!r.finalized_at;
+    const on=CPCOPY.targets.has(r.store_id);
+    const n=remove?storeSplitCount(r):0;
+    const badge=remove?` <span class="hint">(${n})</span>`:'';
+    return `<div class="cpstore${on?' on':''}${fin?' dis':''}" ${fin?'title="Finalized — reopen it first"':`onclick="cpToggle(${r.store_id})"`}>
+      <input type="checkbox" ${on?'checked':''} ${fin?'disabled':''} style="pointer-events:none">
+      <span>${fin?'🔒 ':''}${r.store}${badge}</span></div>`;
+  }).join('');
+  cpSyncButtons();
+}
+function cpToggle(id){
+  CPCOPY.targets.has(id)?CPCOPY.targets.delete(id):CPCOPY.targets.add(id);
+  $('#cpResults').innerHTML='';      // the preview is now stale
+  renderCopyStores();
+}
+function cpToggleAll(on){
+  const remove=CPCOPY.mode==='remove';
+  CPCOPY.targets.clear();
+  if(on) (GEVAL.rows||[])
+    .filter(r=>!r.finalized_at && (remove ? storeSplitCount(r)>0 : r.store_id!==CPCOPY.sourceStoreId))
+    .forEach(r=>CPCOPY.targets.add(r.store_id));
+  $('#cpResults').innerHTML='';
+  renderCopyStores();
+}
+function cpSyncButtons(){
+  const n=CPCOPY?CPCOPY.targets.size:0;
+  ['#cpPreviewBtn','#cpApplyBtn'].forEach(sel=>{
+    $(sel).disabled=!n; $(sel).style.opacity=n?1:.45;
+  });
+  const remove=CPCOPY&&CPCOPY.mode==='remove';
+  const btn=$('#cpApplyBtn');
+  btn.textContent = remove
+    ? (n?`🗑 Remove from ${n} store${n>1?'s':''}`:'🗑 Remove now')
+    : (n?`⧉ Copy to ${n} store${n>1?'s':''}`:'⧉ Copy now');
+  // Destructive action, so it must not look like the friendly primary button.
+  btn.style.background = remove?'var(--fail)':'';
+  btn.style.borderColor = remove?'var(--fail)':'';
+}
+
+async function runCopySplit(dryRun){
+  if(!CPCOPY||!CPCOPY.targets.size) return null;
+  const remove=CPCOPY.mode==='remove';
+  const body=remove
+    ? {store_ids:[...CPCOPY.targets], ...cfg.period(), dry_run:dryRun,
+       ...(CPCOPY.onlyTaskId?{source_task_ids:[CPCOPY.onlyTaskId]}:{})}
+    : {source_store_id:CPCOPY.sourceStoreId, target_store_ids:[...CPCOPY.targets],
+       ...cfg.period(), dry_run:dryRun};
+  const path=remove?'/cleaning/evaluations/allocations/remove':'/cleaning/evaluations/allocations/copy';
+  const r=await api('POST',path,{body});
+  if(!r.ok){ $('#cpError').textContent=briefErr(r.data); return null; }
+  $('#cpError').textContent='';
+  renderCopyResults(r.data,dryRun);
+  return r.data;
+}
+async function previewCopySplit(){ await runCopySplit(true); }
+
+async function applyCopySplit(){
+  // Deleting across several stores at once has no undo, so make it deliberate.
+  if(CPCOPY.mode==='remove'){
+    const what=CPCOPY.onlyTaskId?`"${ALLOC.source.name}"`:'EVERY saved distribution';
+    if(!confirm(`Remove ${what} from ${CPCOPY.targets.size} store(s) for ${GEVAL.period_key}?\n\nThis cannot be undone.`)) return;
+  }
+  const out=await runCopySplit(false);
+  if(!out) return;
+  if(CPCOPY.mode==='remove'){
+    const removed=out.results.reduce((n,x)=>n+x.removed,0);
+    const stores=out.results.filter(x=>x.removed>0).length;
+    toast(removed?`Removed from ${stores} store${stores>1?'s':''}`:'Nothing removed — see the reasons',!removed);
+  } else {
+    const copied=out.results.reduce((n,x)=>n+x.copied,0);
+    const stores=out.results.filter(x=>x.copied>0).length;
+    toast(copied?`Copied to ${stores} store${stores>1?'s':''}`:'Nothing copied — see the reasons',!copied);
+  }
+  loadEval();
+}
+
+// Reasons are shown verbatim from the API. The auditor needs to know WHICH
+// store was left out and why, not just a count.
+const CP_REASONS={
+  nothing_to_copy:'source store has no saved split for this period',
+  nothing_to_remove:'this store has no saved split for this period',
+  evaluation_already_finalized:'finalized — reopen it first',
+  source_task_not_absent_here:'that task is not absent for this store',
+  target_task_not_in_play:'a receiving task is not gradable here',
+  split_does_not_match_weight:'the split does not add up to the task weight',
+  store_not_visible:'store not in this grid'
+};
+function renderCopyResults(out,dryRun){
+  // Copy reports `copied`, remove reports `removed` — otherwise identical shapes,
+  // which is the point of using one modal for both.
+  const remove=CPCOPY&&CPCOPY.mode==='remove';
+  const scope=remove
+    ? (out.scope==='selected_tasks'?'the chosen task only':'every saved split')
+    : `${out.source.splits} split(s) on the source store`;
+  const head=`<div style="font-weight:700;margin-bottom:6px">${dryRun?'Preview — nothing written yet':'Done'}
+    <span class="hint">· ${scope}</span></div>`;
+  $('#cpResults').innerHTML=head+out.results.map(r=>{
+    const label=r.store||('#'+r.store_id);
+    const n=remove?r.removed:r.copied;
+    const good=n
+      ? `<span class="ok">${remove?'🗑':'✓'} ${n} split${n>1?'s':''}</span>`
+      : '<span class="no">— nothing</span>';
+    const bad=(r.skipped||[]).map(s=>`<div class="hint" style="margin-left:6px">↳ skipped: ${CP_REASONS[s.reason]||s.reason}</div>`).join('');
+    return `<div class="cprow"><div style="flex:1"><b>${label}</b>${bad}</div><div>${good}</div></div>`;
+  }).join('');
+}
+
+/* ---------------- SCORING SETTINGS ---------------- */
+// The final score is (items × items_share) + (chart × chart_share). Both shares
+// live in the cleaning_settings table rather than a config file, so the balance
+// can be retuned without a deploy — which is exactly what this screen is for.
+let SCORING={score_formula:'average',items_share:50,chart_share:50};
+
+const SC_FORMULAS={
+  average:'Average of the two halves — the cleaning chart is worth its real score, not one all-or-nothing point.',
+  excel:'The old Excel formula — the WHOLE cleaning chart counts as a single point. A store failing every cleaning task still scored ~95%.'
+};
+
+async function openScoring(){
+  const r=await api('GET','/cleaning/settings');
+  if(r.ok && r.data && r.data.data) SCORING=r.data.data;
+  $('#scItems').value=SCORING.items_share;
+  $('#scChart').value=SCORING.chart_share;
+  $('#scThresh').value=SCORING.completion_threshold??100;
+  $('#scError').textContent='';
+  renderScoringSeg(); renderGateSeg(); renderScoringSum();
+  $('#scoringOverlay').classList.add('on'); $('#scoringModal').classList.add('on');
+}
+function closeScoring(){ $('#scoringOverlay').classList.remove('on'); $('#scoringModal').classList.remove('on'); }
+
+function renderScoringSeg(){
+  $('#scFormulaSeg').innerHTML=Object.keys(SC_FORMULAS).map(f=>
+    `<button class="${SCORING.score_formula===f?'on':''}" onclick="setScoringFormula('${f}')">${f==='average'?'Average':'Excel (old)'}</button>`).join('');
+  $('#scFormulaHint').textContent=SC_FORMULAS[SCORING.score_formula]||'';
+  // The shares only mean anything for the average formula.
+  const on=SCORING.score_formula==='average';
+  ['#scItems','#scChart'].forEach(sel=>{$(sel).disabled=!on;$(sel).style.opacity=on?1:.45;});
+  renderScoringSum();
+}
+function setScoringFormula(f){ SCORING.score_formula=f; renderScoringSeg(); }
+
+// ── the completion gate ──
+const SC_RULES={any:'Marked complete once',all:'Every occurrence',threshold:'A percentage'};
+
+function renderGateSeg(){
+  const on=!!SCORING.chart_requires_completion;
+  $('#scGateSeg').innerHTML=[[true,'On'],[false,'Off']].map(([v,lbl])=>
+    `<button class="${on===v?'on':''}" onclick="setGate(${v})">${lbl}</button>`).join('');
+  $('#scRuleSeg').innerHTML=Object.keys(SC_RULES).map(k=>
+    `<button class="${SCORING.completion_rule===k?'on':''}" onclick="setGateRule('${k}')">${SC_RULES[k]}</button>`).join('');
+  // The rule only means anything while the gate is on.
+  $('#scRuleWrap').style.opacity=on?1:.45;
+  $$('#scRuleSeg button').forEach(b=>b.disabled=!on);
+  $('#scThresh').disabled=!on||SCORING.completion_rule!=='threshold';
+  $('#scThreshWrap').style.display=SCORING.completion_rule==='threshold'?'':'none';
+}
+function setGate(v){ SCORING.chart_requires_completion=v; renderGateSeg(); }
+function setGateRule(k){ SCORING.completion_rule=k; renderGateSeg(); }
+function onScoringThreshChange(){
+  SCORING.completion_threshold=Math.max(1,Math.min(100,parseInt($('#scThresh').value,10)||100));
+}
+
+// Typing one share fills in the other — they must total 100, and making the user
+// do that subtraction is how typos like 60/60 get saved.
+function onScoringShareChange(which){
+  const v=Math.max(0,Math.min(100,parseInt($(which==='items'?'#scItems':'#scChart').value,10)||0));
+  if(which==='items'){ $('#scItems').value=v; $('#scChart').value=100-v; }
+  else               { $('#scChart').value=v; $('#scItems').value=100-v; }
+  renderScoringSum();
+}
+
+function renderScoringSum(){
+  const i=parseInt($('#scItems').value,10)||0, c=parseInt($('#scChart').value,10)||0;
+  const ok=(i+c)===100;
+  $('#scSum').innerHTML=ok
+    ? `<span style="color:var(--pass)">✓ ${i} + ${c} = 100</span>`
+    : `<span style="color:var(--fail)">✗ ${i} + ${c} = ${i+c} — must be 100</span>`;
+  $('#scSaveBtn').disabled=!ok;
+  $('#scSaveBtn').style.opacity=ok?1:.45;
+
+  // Show the effect on a store actually on screen, so the change is not abstract.
+  const row=(GEVAL&&GEVAL.rows||[]).find(r=>r.score_sides&&r.score_sides.length===2);
+  if(!row||SCORING.score_formula!=='average'){ $('#scPreview').textContent='Open a graded period to preview the effect.'; return; }
+  const preview=((row.item_score*i)+(row.chart_score*c))/100;
+  $('#scPreview').innerHTML=`<b>Preview — store ${row.store}</b><br>
+    (${pct1(row.item_score)} × ${i}%) + (${pct1(row.chart_score)} × ${c}%) = <b>${preview.toFixed(1)}%</b>
+    <span style="color:var(--muted)"> · now ${pct1(row.final_score)}</span>`;
+}
+
+async function saveScoring(){
+  const body={
+    score_formula:SCORING.score_formula,
+    items_share:parseInt($('#scItems').value,10),
+    chart_share:parseInt($('#scChart').value,10),
+    chart_requires_completion:!!SCORING.chart_requires_completion,
+    completion_rule:SCORING.completion_rule||'all',
+    completion_threshold:parseInt($('#scThresh').value,10)||100,
+  };
+  const r=await api('PUT','/cleaning/settings',{body});
+  if(r.ok){ closeScoring(); toast('Scoring settings saved'); loadEval(); return; }
+  $('#scError').textContent = r.status===403
+    ? 'Only a Super Admin can change scoring settings.'
+    : briefErr(r.data);
+}
+
+async function addItem(){
+  const v=$('#newItem').value.trim(); if(!v) return;
+  const w=Math.max(1,Math.min(100,parseInt($('#newItemWeight').value,10)||1));
+  const r=await api('POST','/cleaning/inspection-items',{body:{name:v,weight:w}});
+  if(r.ok){ $('#newItem').value=''; $('#newItemWeight').value=1; toast('Item added'); loadEval(); }
+}
+
+// Weights are the whole point of the August 2026 change, and there was no way to
+// change one without deleting the item and re-creating it (which loses its
+// history). PUT /inspection-items/{id} exists for exactly this.
+async function editItemWeight(id){
+  const item=((GEVAL&&GEVAL.items)||[]).find(x=>x.id===id); if(!item) return;
+  const cur=Number(item.weight??1);
+  const input=prompt(`Weight for "${item.name}" (1–100).\n\n1 = counts the same as every other item.\nHigher = failing it costs the store more.\n\nOnly affects future grading — already-graded cells keep the weight they were scored at.`,cur);
+  if(input===null) return;                       // cancelled
+  const w=parseInt(input,10);
+  if(!Number.isFinite(w)||w<1||w>100){ toast('Weight must be a whole number from 1 to 100',true); return; }
+  if(w===cur) return;
+  const r=await api('PUT','/cleaning/inspection-items/'+id,{body:{weight:w}});
+  if(r.ok){ toast(`"${item.name}" is now weight ${w}`); loadEval(); }
+}
 async function delItem(id){if(!confirm('Remove this item column?'))return;const r=await api('DELETE','/cleaning/inspection-items/'+id);if(r.ok){toast('Item removed');loadEval();}}
 /* ---------------- GRADE MODAL — items only (verdict + notice + photos).
    Chart tasks never use this popup: everywhere on the Cleaning Chart (and the
    quick "Evaluate" shortcut on the Tasks/Due page) they stay a plain click-to-
    toggle pass/fail via toggleCC(), same as before. ---------------- */
 let GRADE={storeId:null,itemId:null,value:'empty',files:[],existing:[]};
-const GRADE_VALUES=['pass','fail','auto_fail','empty'];
+// 'empty' CLEARS the cell (row + note + photos); 'not_applicable' is a recorded
+// decision that takes the item out of the score without counting as a failure.
+const GRADE_VALUES=['pass','fail','auto_fail','not_applicable','empty'];
 function openGrade({storeId,itemId,label,current,note,existingPhotos}){
   GRADE={storeId,itemId,value:current||'empty',files:[],existing:existingPhotos||[]};
   $('#gradeTitle').textContent='Evaluate item — '+(label||'');
@@ -642,6 +1417,7 @@ function renderGradeExisting(){
 }
 function closeGrade(){$('#gradeOverlay').classList.remove('on');$('#gradeModal').classList.remove('on');}
 async function saveGrade(){
+  if(!await ensurePeriod()){toast('Pick a period first',true);return;}
   const fd=new FormData();
   fd.append('store_id',GRADE.storeId);
   fd.append('period_type',cfg.period().period_type);
@@ -671,6 +1447,7 @@ function openGradeFromItem(storeId,itemId){
 // Chart. No popup, matching that page's quick-grading behaviour.
 async function quickEvaluateDue(i){
   const it=WINS[i]; if(!it||!it.task_id) return;
+  if(!await ensurePeriod()){toast('Pick a period first',true);return;}
   const r=await api('GET','/cleaning/evaluations',{query:cfg.period()});
   if(!r.ok) return;
   const row=(r.data.rows||[]).find(x=>String(x.store_id)===String(cfg.store()));
@@ -682,6 +1459,22 @@ async function quickEvaluateDue(i){
 }
 
 /* ---------------- EVALUATION DETAILS DRAWER (reuses the History drawer) ---------------- */
+// Why a task failed matters more than the fact that it did: "you did not do it"
+// and "you did it badly" are very different things to tell a store.
+function completionLine(t){
+  if(!t.completion_expected_period) return `<div class="meta">Not due this period.</div>`;
+  const who=(t.done_by&&t.done_by.length)?' by '+t.done_by.join(', '):'';
+  const when=t.last_done_at?' on '+new Date(t.last_done_at).toLocaleString():'';
+  const late=t.completion_late?' <span style="color:var(--fail)">(marked late)</span>':'';
+  if(t.completion_done)
+    return `<div class="meta">✓ Marked complete${who}${when}${late}</div>`;
+  if(t.lock_reason==='period_not_finished')
+    return `<div class="meta" style="color:#a8862f">⏳ Not marked complete yet — cannot be evaluated.
+      The period is still open, so nothing is failed.</div>`;
+  return `<div class="meta" style="color:var(--fail)">🔒 Never marked complete —
+    ${t.auto_failed?'failed automatically':'cannot be evaluated'}.</div>`;
+}
+
 function openStoreDetails(storeId){
   const row=(GEVAL&&GEVAL.rows||[]).find(r=>r.store_id===storeId); if(!row){toast('Load the Evaluation grid first.',true);return;}
   $('#drTitle').textContent='Evaluation details — '+row.store;
@@ -700,7 +1493,8 @@ function openStoreDetails(storeId){
   ['daily','weekly','monthly','hourly'].forEach(f=>(row.chart[f]||[]).forEach(t=>{
     const col=t.verdict==='pass'?'var(--pass)':t.verdict?'var(--fail)':'#ccc';
     chartRows.push(`<div class="tl-item"><div class="tl-dot" style="background:${col}"></div><div class="tl-body">
-      <b>${t.name} <span class="win-tag">(${f} · weight ${t.weight})</span> — ${t.verdict?LBL[t.verdict]:'Ungraded'}</b>
+      <b>${t.name} <span class="win-tag">(${f} · weight ${t.effective_weight??t.weight}${(t.allocated_from&&t.allocated_from.length)?' = '+t.base_weight+' + '+t.allocated_from.map(a=>a.amount+' from '+a.name).join(' + '):''})</span> — ${t.verdict?LBL[t.verdict]:'Not graded'}${t.verdict_source==='system'?' <span class="tksys">auto</span>':''}${t.historical?' <span class="hint">(recorded earlier — not due this period)</span>':''}</b>
+      ${completionLine(t)}
       ${t.note?`<div class="meta">${t.note}</div>`:''}
       ${(t.photos&&t.photos.length)?`<div class="ph-row">${t.photos.map(u=>`<a href="${u}" target="_blank"><img class="ph-thumb" src="${u}" alt="photo"></a>`).join('')}</div>`:''}
     </div></div>`);
@@ -712,6 +1506,7 @@ function openStoreDetails(storeId){
 
 /* ---------------- NOTIFICATIONS / DUE EVALUATIONS ---------------- */
 async function loadNotifications(){
+  if(!await ensurePeriod('#notifRows')) return;
   await loadEval();
   $('#notifStoreLbl').textContent=cfg.store();
   $('#notifPeriodLbl').textContent=cfg.period().period_key;
@@ -728,6 +1523,7 @@ async function loadNotifications(){
 
 /* ---------------- MY STORE ITEMS (read-only Store Manager view) ---------------- */
 async function loadStoreItems(){
+  if(!await ensurePeriod('#siRows')) return;
   await loadEval();
   $('#siStoreLbl').textContent=cfg.store();
   $('#siPeriodLbl').textContent=cfg.period().period_key;
@@ -761,6 +1557,7 @@ function openItemDetails(storeId,itemId){
 function closeItemDetails(){$('#itemDetailsOverlay').classList.remove('on');$('#itemDetailsModal').classList.remove('on');}
 
 async function exportCSV(){
+  if(!await ensurePeriod()){toast('Pick a period first',true);return;}
   const q=new URLSearchParams(cfg.period()).toString();const headers={'Accept':'text/csv'};const t=cfg.token();if(t)headers.Authorization='Bearer '+t;
   try{const res=await fetch(cfg.base()+'/cleaning/reports/csv?'+q,{headers});if(!res.ok){toast('CSV '+res.status,true);return;}
     const blob=await res.blob();const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='evaluation.csv';a.click();toast('CSV downloaded');}catch(e){toast('CSV error',true);}
@@ -775,43 +1572,64 @@ const REPORT_THEMES={
   top:  {title:'TOP CLEANING PERFORMANCE STORES',     bar:'#9a9a9a', head:'#8a8a8a', tint:'#e6e6e6'},
   watch:{title:'CLEANING PERFORMANCE WATCHLIST',      bar:'#b5573a', head:'#5c2310', tint:'#f0d8cf'},
 };
-// Score = (# pass items + 1 if commitment passes) / (items + 1)  — matches the Excel /8 formula.
-function reportScore(row, items){
-  let pass = items.filter(it=>(row.item_values[it.name]||{}).value==='pass').length;
-  const commitmentPass = Number(row.chart_score) >= 100;   // all chart tasks passed
-  if(commitmentPass) pass++;
-  const denom = items.length + 1;
-  return { pct: denom ? Math.round(pass/denom*1000)/10 : 0, commitmentPass };
+// The score comes from the API now (row.final_score / row.commitment_pass).
+//
+// It used to be computed right here, which meant it could never see an
+// inspection item's weight — the formula counted items instead of weighing them —
+// and the number existed only in this browser, so it could never be stored,
+// notified, or charted over time. The backend reproduces the same Excel formula
+// (see CleaningScoringService::finalScore) and then extends it with weights.
+//
+// The fallback keeps this page working against a backend that predates the
+// change; delete it once /evaluations returns final_score everywhere.
+function reportScore(row){
+  // null is a real answer now — "nothing has been graded, so there is no score".
+  // The old local fallback is gone: it would invent a number for that case, and
+  // it could never see item weights anyway.
+  const v = row.final_score;
+  return { pct: (v===null||v===undefined) ? null : Number(v), commitmentPass: !!row.commitment_pass };
 }
 function chartTasksHtml(row){
   const tasks=[]; ['daily','weekly','monthly','hourly'].forEach(f=>((row.chart&&row.chart[f])||[]).forEach(t=>tasks.push(t)));
   if(!tasks.length) return '<span class="cm-none">—</span>';
-  return tasks.map(t=>`<span class="cm-task ${t.verdict==='pass'?'p':(t.verdict?'f':'e')}">${t.name}</span>`).join('');
+  return tasks.map(t=>`<span class="cm-task ${t.verdict==='pass'?'p':(t.verdict==='not_applicable'?'n':(t.verdict?'f':'e'))}" title="${t.verdict?LBL[t.verdict]:'Not graded'}">${t.name}</span>`).join('');
 }
-function scoreBar(pct){ return `<div class="sc-bar"><div class="sc-fill" style="width:${Math.max(0,Math.min(100,pct))}%"></div><span class="sc-txt">${pct.toFixed(1)}%</span></div>`; }
-function cellCls(v){ return v==='pass'?'p':(v==='empty'||!v?'e':'f'); }
+function scoreBar(pct){
+  if(pct===null||pct===undefined) return `<div class="sc-bar"><span class="sc-txt" style="color:var(--muted)">—</span></div>`;
+  return `<div class="sc-bar"><div class="sc-fill" style="width:${Math.max(0,Math.min(100,pct))}%"></div><span class="sc-txt">${Number(pct).toFixed(1)}%</span></div>`;
+}
+function cellCls(v){ return v==='pass'?'p':(v==='not_applicable'?'n':(v==='empty'||!v?'e':'f')); }
 
 function openReport(kind){
   $('#reportMenu').classList.remove('on');
   if(!GEVAL){toast('Open Evaluation first',true);return;}
   const items=GEVAL.items||[];
-  let rows=(GEVAL.rows||[]).map(r=>({...r, _sc:reportScore(r,items)}));
+  let rows=(GEVAL.rows||[]).map(r=>({...r, _sc:reportScore(r)}));
   const theme = REPORT_THEMES[kind] || REPORT_THEMES.full;
   let showGrand=false;
-  if(kind==='top'){   rows=rows.filter(r=>r._sc.pct>=100).sort((a,b)=>b._sc.pct-a._sc.pct); showGrand=true; }
-  if(kind==='watch'){ rows=rows.filter(r=>r._sc.pct<=50 ).sort((a,b)=>a._sc.pct-b._sc.pct); showGrand=true; }
+  // Guard the null: `null <= 50` is true in JS, so an ungraded store would
+  // otherwise be published on the watchlist as if it had scored zero.
+  const scored=r=>r._sc.pct!==null&&r._sc.pct!==undefined;
+  if(kind==='top'){   rows=rows.filter(r=>scored(r)&&r._sc.pct>=100).sort((a,b)=>b._sc.pct-a._sc.pct); showGrand=true; }
+  if(kind==='watch'){ rows=rows.filter(r=>scored(r)&&r._sc.pct<=50 ).sort((a,b)=>a._sc.pct-b._sc.pct); showGrand=true; }
   const week=$('#periodKey').value;
 
-  const header=`<tr><th class="rp-store">Store#</th>${items.map(i=>`<th>${i.name}</th>`).join('')}<th>Cleaning chart commitment</th><th class="rp-sch">Score</th></tr>`;
+  const header=`<tr><th class="rp-store">Store#</th>${items.map(i=>{
+    const w=Number(i.weight??1);
+    return `<th>${i.name}${w>1?`<div style="font-size:9px;font-weight:600;opacity:.8">weight ${w}</div>`:''}</th>`;
+  }).join('')}<th>Cleaning chart commitment</th><th class="rp-sch">Score</th></tr>`;
   const body=rows.map(r=>{
     const cells=items.map(it=>{const v=(r.item_values[it.name]||{}).value||'empty';return `<td class="rp-${cellCls(v)}">${v==='empty'?'':LBL[v]}</td>`;}).join('');
-    const cm=`<td class="rp-cm rp-${r._sc.commitmentPass?'p':'f'}"><div class="cm-head">${r._sc.commitmentPass?'Pass':'Fail'}</div><div class="cm-tasks">${chartTasksHtml(r)}</div></td>`;
-    return `<tr><td class="rp-store">${r.store_id}</td>${cells}${cm}<td class="rp-score">${scoreBar(r._sc.pct)}</td></tr>`;
+    // Showing only "Fail" made stores read a 66.7% chart as a total loss.
+    const cm=`<td class="rp-cm rp-${r.chart_score>=70?'p':(r.chart_score>=40?'e':'f')}"><div class="cm-head">${pct1(r.chart_score)}</div><div class="cm-tasks">${chartTasksHtml(r)}</div></td>`;
+    const how=(r.score_sides||[]).length===2 ? `<div class="rp-how">${pct1(r.item_score)} items · ${pct1(r.chart_score)} cleaning</div>` : '';
+    return `<tr><td class="rp-store">${r.store_id}</td>${cells}${cm}<td class="rp-score">${scoreBar(r._sc.pct)}${how}</td></tr>`;
   }).join('') || `<tr><td colspan="${items.length+3}" style="padding:16px;font-weight:600">No stores match.</td></tr>`;
 
   let grand='';
   if(showGrand && rows.length){
-    const avg=Math.round(rows.reduce((a,r)=>a+r._sc.pct,0)/rows.length*10)/10;
+    const scoredRows=rows.filter(r=>r._sc.pct!==null&&r._sc.pct!==undefined);
+    const avg=scoredRows.length?Math.round(scoredRows.reduce((a,r)=>a+r._sc.pct,0)/scoredRows.length*10)/10:null;
     grand=`<tr class="rp-grand"><td>Grand Total</td><td colspan="${items.length+1}"></td><td class="rp-score">${scoreBar(avg)}</td></tr>`;
   }
 
@@ -828,9 +1646,13 @@ function exportReportImage(){const node=$('#rptCanvas');if(window.html2canvas){h
 
 /* ---------------- NAV / ROLES ---------------- */
 const TITLES={tasks:'Tasks',create:'Create Task',eval:'Evaluation',notif:'Notifications',storeitems:'My Store Items'};
+// True until the period list has been fetched. go() still switches the view
+// while booting, it just does not load data yet — see /* init */ at the bottom.
+let BOOTING=false;
 function go(view){$$('.main section').forEach(s=>s.classList.add('hidden'));$('#v-'+view).classList.remove('hidden');
   $$('#ccSub button').forEach(b=>b.classList.toggle('on',b.dataset.view===view));
   $('#pageTitle').textContent=TITLES[view];$('#crumb').textContent=TITLES[view];
+  if(BOOTING) return;
   if(view==='tasks')loadDue(); if(view==='eval')loadEval(); if(view==='create')loadTasks(); if(view==='notif')loadNotifications(); if(view==='storeitems')loadStoreItems();}
 $$('#ccSub button').forEach(b=>b.onclick=()=>go(b.dataset.view));
 const META={manager:{name:'Store Manager',role:'own store',av:'SM'},audit:{name:'Auditor',role:'all stores',av:'AU'},super:{name:'Super Admin',role:'full',av:'SA'}};
@@ -841,7 +1663,25 @@ $('#role').onchange=applyRole;
 function reloadView(){const v=$$('#ccSub button.on')[0]?.dataset.view||'tasks';go(v);}
 
 /* init */
-applyRole();loadDue();
+// The period list is FETCHED now, not computed locally, so it is not available
+// on the first paint. applyRole() switches to a view, and go() used to load that
+// view immediately — which fired /evaluations with period_key='' and got a 422.
+//
+// So: build the nav first with loading suppressed, fetch the periods, then do a
+// single load once we actually have a key.
+BOOTING=true;
+applyRole();
+(async () => {
+  await populatePeriodKeyOptions();
+  syncDueDateFromPeriod();
+  BOOTING=false;
+  reloadView();
+})();
+
+// Pasting a token is what makes /cleaning/periods reachable in the first place,
+// so refill the dropdown when the connection details change.
+$('#token').onchange=onConnectionChange;
+$('#baseUrl').onchange=onConnectionChange;
 </script>
 </body>
 </html>
