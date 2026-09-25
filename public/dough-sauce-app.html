@@ -518,9 +518,11 @@ function fillDemoBases(){
  * server does not hold one and does not proxy for one.
  */
 async function loadBase(){
-  const r=await api('GET','/dough-sauce/daily-plan',{
+  // Store in the PATH here too — same reason as the inventory route: it is the
+  // shape pizzasys' auth_rules are written against in that project.
+  const r=await api('GET',`/dough-sauce/stores/${cfg.store()}/daily-plan`,{
     origin:cfg.data(),
-    query:{store:cfg.store(),date:cfg.date(),lookback:4,include_refunded:'false'},
+    query:{date:cfg.date(),lookback:4,include_refunded:'false'},
   },'base');
   show('base',r.data);
   const box=$('#baseInfo');
