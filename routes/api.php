@@ -13,6 +13,8 @@ use App\Http\Controllers\Api\Cleaning\EvaluationAllocationController;
 use App\Http\Controllers\Api\Cleaning\EvaluationController;
 use App\Http\Controllers\Api\Cleaning\InspectionItemController;
 use App\Http\Controllers\Api\CustomReportController;
+use App\Http\Controllers\Api\DoughSauce\DsJudgementController;
+use App\Http\Controllers\Api\DoughSauce\DsPlanController;
 use App\Http\Controllers\Api\EntityController;
 use App\Http\Middleware\AuthTokenStoreScopeMiddleware;
 use Illuminate\Support\Facades\Route;
@@ -97,5 +99,41 @@ Route::middleware([
         // Reports
         Route::get('reports/csv', [CleaningReportController::class, 'csv'])->name('cleaning.reports.csv');
         Route::get('reports/data', [CleaningReportController::class, 'data'])->name('cleaning.reports.data');
+    });
+
+    // ================================= Dough & Sauce ==============================
+    // The frontend fetches sales from LC_PIZZA_DATA and counts from the inventory
+    // system directly, and does the arithmetic itself. These endpoints only store
+    // and return what a human decided — the buffer, the plan, the weekly
+    // judgement — and guard who may decide it.
+    //
+    // There is no bootstrap/config endpoint: the scoring weights live with the
+    // formula that uses them, which is in the client. The one thing the client
+    // must NOT work out for itself is the accounting week — ours runs Tuesday to
+    // Monday and isoWeek() diverges from it on 2026-12-29 — so every read below
+    // carries a `weeks` list, and every period parameter is optional and defaults
+    // to the current one. The client never has to know a date to ask for a date.
+    Route::prefix('dough-sauce')->group(function () {
+
+        // The daily plan. Store id in the PATH (must be {store_id} — the auth
+        // middleware reads route params by name into store_context).
+        Route::get('stores/{store_id}/plan', [DsPlanController::class, 'show'])->name('dough-sauce.plan.show');
+        Route::post('stores/{store_id}/plan', [DsPlanController::class, 'confirm'])->name('dough-sauce.plan.confirm');
+
+        // All visible stores for a period — the specialist's two screens:
+        //   ?date=        one day  — who has not confirmed
+        //   ?week_start=  one week — the follow-up grid and the report, with the
+        //                            judgements folded in
+        // The week shape is what keeps that grid at one request instead of one
+        // per store.
+        Route::get('plans', [DsPlanController::class, 'index'])->name('dough-sauce.plan.index');
+
+        // One store's whole accounting week: plans + judgement + the previous
+        // weeks' boundaries the progress figure needs.
+        Route::get('stores/{store_id}/week', [DsPlanController::class, 'week'])->name('dough-sauce.week');
+
+        // The weekly judgement — 40% of the score, specialist only. Write only;
+        // reads come back with GET /plans?week_start=.
+        Route::put('stores/{store_id}/judgement', [DsJudgementController::class, 'update'])->name('dough-sauce.judgements.update');
     });
 });

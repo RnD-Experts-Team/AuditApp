@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dough &amp; Sauce — Live (API)</title>
+<style>
+  :root{
+    --ink:#12211c;--paper:#f6f4ee;--panel:#fff;--line:#dcd8cd;--muted:#6f7a72;
+    --brand:#8a4b1c;--brand-soft:#f6ece2;
+    --pass:#1f7a4d;--pass-bg:#e3f3e9;--fail:#b23a34;--fail-bg:#fbe6e4;
+    --pend:#9a7420;--pend-bg:#f7eecf;--info:#1f5c8a;--info-bg:#e4eff7;
+    --radius:10px;--shadow:0 1px 2px rgba(18,33,28,.06),0 8px 24px rgba(18,33,28,.05);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--paper);color:var(--ink);font-size:14px;line-height:1.45}
+  h1,h2,h3{margin:0;font-weight:650;letter-spacing:-.01em}
+  button{font-family:inherit;cursor:pointer}
+  input,select,textarea{font-family:inherit;font-size:14px}
+  code,.mono{font-family:ui-monospace,"Cascadia Mono",Consolas,monospace}
+
+  .app{display:flex;min-height:100vh}
+  .side{width:236px;flex-shrink:0;background:var(--ink);color:#dfe6e1;padding:18px 12px;display:flex;flex-direction:column;gap:3px;position:sticky;top:0;height:100vh;overflow:auto}
+  .brand{display:flex;align-items:center;gap:10px;padding:6px 8px 16px}
+  .brand .dot{width:30px;height:30px;border-radius:8px;background:var(--brand);display:grid;place-items:center;font-weight:700;color:#fff}
+  .brand b{color:#fff;font-size:15px}.brand span{display:block;font-size:11px;color:#9a8d80}
+  .side .lbl{font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:#7d8a82;padding:12px 10px 4px}
+  .nav button{display:flex;align-items:center;gap:9px;width:100%;text-align:left;background:transparent;border:0;color:#b8c6bd;padding:8px 10px;border-radius:7px;font-size:13px;font-weight:500}
+  .nav button:hover{background:rgba(255,255,255,.06);color:#fff}
+  .nav button.on{background:var(--brand);color:#fff}
+  .nav button .m{margin-left:auto;font-size:9.5px;font-weight:700;opacity:.75;letter-spacing:.04em}
+  .side .foot{margin-top:auto;font-size:11px;color:#7d8a82;padding:8px;line-height:1.5}
+
+  .main{flex:1;display:flex;flex-direction:column;min-width:0}
+  .top{background:var(--panel);border-bottom:1px solid var(--line);padding:12px 22px;display:flex;align-items:center;gap:14px;position:sticky;top:0;z-index:20}
+  .crumb{font-size:12px;color:var(--muted)}.top h2{font-size:17px}
+  .spacer{flex:1}
+
+  .conn{background:#fffdf8;border-bottom:1px solid var(--line);padding:10px 22px;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;position:sticky;top:53px;z-index:19}
+  .conn .f{display:flex;flex-direction:column;gap:3px}
+  .conn label{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600}
+  .conn input,.conn select{border:1px solid var(--line);border-radius:8px;padding:6px 9px;background:#fff}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#c9c4b8;margin-right:5px}
+  .dot.ok{background:var(--pass)}.dot.bad{background:var(--fail)}
+
+  .wrap{padding:20px 22px 60px;max-width:1220px}
+  section{display:none}section.on{display:block}
+
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:16px;overflow:hidden}
+  .card>.h{padding:12px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .card>.h h3{font-size:14px}
+  .card>.h .sub{font-size:11.5px;color:var(--muted)}
+  .card>.b{padding:16px}
+
+  .btn{border:1px solid var(--line);background:#fff;border-radius:8px;padding:7px 13px;font-size:13px;font-weight:550}
+  .btn:hover{border-color:var(--muted)}
+  .btn.pri{background:var(--brand);color:#fff;border-color:var(--brand)}
+  .btn.pri:hover{filter:brightness(1.08)}
+  .btn.sm{padding:5px 10px;font-size:12px}
+  .btn.link{border:0;background:none;color:var(--info);padding:4px 6px;text-decoration:underline}
+  .btn:disabled{opacity:.45;cursor:not-allowed}
+
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{padding:8px 10px;text-align:left;border-bottom:1px solid #edeae2;vertical-align:middle}
+  th{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);background:#fbfaf6;font-weight:650}
+  tbody tr:hover{background:#fbfaf6}
+  td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+
+  .pill{display:inline-block;font-size:11px;font-weight:650;padding:2px 8px;border-radius:99px}
+  .pill.ok{background:var(--pass-bg);color:var(--pass)}
+  .pill.no{background:var(--fail-bg);color:var(--fail)}
+  .pill.pend{background:var(--pend-bg);color:var(--pend)}
+  .pill.info{background:var(--info-bg);color:var(--info)}
+  .pill.mut{background:#f0ede6;color:var(--muted)}
+
+  .reqline{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--muted);padding:8px 16px;background:#fbfaf6;border-bottom:1px solid var(--line);flex-wrap:wrap}
+  .reqline .m{font-weight:700;font-size:10px;padding:2px 6px;border-radius:5px;background:var(--ink);color:#fff}
+  .reqline .u{font-family:ui-monospace,Consolas,monospace;color:var(--ink);word-break:break-all}
+  .reqline .st{margin-left:auto;font-weight:700}
+  .st2{color:var(--pass)}.st4,.st5{color:var(--fail)}.st0{color:var(--muted)}
+
+  pre.json{margin:0;padding:14px 16px;background:#151e1a;color:#cfe3d8;font-size:11.5px;line-height:1.5;overflow:auto;max-height:420px;font-family:ui-monospace,Consolas,monospace}
+  details.raw{border-top:1px solid var(--line)}
+  details.raw>summary{padding:8px 16px;font-size:11.5px;color:var(--muted);cursor:pointer;user-select:none}
+  details.raw>summary:hover{color:var(--ink)}
+
+  .grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}
+  .kpi{border:1px solid var(--line);border-radius:9px;padding:11px 13px;background:#fffdf8}
+  .kpi .k{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:650}
+  .kpi .v{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.25}
+  .kpi .s{font-size:11px;color:var(--muted)}
+
+  .note{background:var(--info-bg);border:1px solid #c6ddee;border-radius:9px;padding:10px 13px;font-size:12.5px;color:#14415f;margin-bottom:14px}
+  .note b{font-weight:650}
+  .note.warn{background:var(--pend-bg);border-color:#e8d9a8;color:#6b5210}
+
+  .inp{border:1px solid var(--line);border-radius:7px;padding:6px 9px;width:100%;font-variant-numeric:tabular-nums}
+  .inp:focus{outline:2px solid var(--brand-soft);border-color:var(--brand)}
+
+  #toast{position:fixed;right:18px;bottom:18px;display:flex;flex-direction:column;gap:8px;z-index:200;max-width:460px}
+  .tst{background:var(--ink);color:#fff;padding:10px 14px;border-radius:9px;font-size:12.5px;box-shadow:0 8px 26px rgba(0,0,0,.28);animation:sl .18s ease}
+  .tst.bad{background:var(--fail)}
+  @keyframes sl{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <aside class="side">
+    <div class="brand"><div class="dot">D</div><div><b>Dough &amp; Sauce</b><span>live API tester</span></div></div>
+
+    <div class="lbl">Store manager</div>
+    <div class="nav">
+      <button data-v="plan" class="on">Daily plan<span class="m">GET·POST</span></button>
+    </div>
+
+    <div class="lbl">Specialist</div>
+    <div class="nav">
+      <button data-v="plans">All plans<span class="m">GET</span></button>
+      <button data-v="week">Store week<span class="m">GET</span></button>
+      <button data-v="judge">Week grid + judge<span class="m">GET·PUT</span></button>
+    </div>
+
+    <div class="lbl">Tools</div>
+    <div class="nav">
+      <button data-v="raw">Raw request<span class="m">ANY</span></button>
+    </div>
+
+    <div class="foot">
+      5 endpoints · all behind<br>AuthTokenStoreScopeMiddleware.<br><br>
+      Open via <code>php artisan serve</code><br>→ /dough-sauce-app.html
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="top">
+      <div><div class="crumb" id="crumb">Store manager</div><h2 id="title">Daily plan</h2></div>
+      <div class="spacer"></div>
+      <span><span class="dot" id="connDot"></span><span id="connTxt" style="font-size:12px;color:var(--muted)">idle</span></span>
+    </header>
+
+    <!-- CONNECTION BAR -->
+    <div class="conn">
+      <div class="f" style="flex:1;min-width:165px"><label title="AuditApp — stores the buffer and the plan">AuditApp API</label><input id="baseUrl"></div>
+      <div class="f" style="flex:1;min-width:165px"><label title="LC_PIZZA_DATA — sales, recipes, the base figure">Data project API</label><input id="dataUrl"></div>
+      <div class="f" style="flex:1;min-width:165px"><label title="inventory — what was actually counted">Inventory API</label><input id="invUrl"></div>
+      <div class="f" style="flex:2;min-width:230px"><label>Bearer token</label><input id="token" placeholder="paste token (blank = 401)"></div>
+      <div class="f" style="width:130px"><label title="The {store_id} path segment — the store's key, e.g. 03795-00001">Store key</label><input id="storeId" value="03795-00001"></div>
+      <div class="f" style="width:140px"><label title="Production date — the day the dough is FOR">Plan date</label><input id="planDate" type="date"></div>
+      <div class="f" style="width:170px"><label title="Served by GET /periods — never computed here">◀ Accounting week</label><select id="weekStart"></select></div>
+      <div class="f"><label>&nbsp;</label><button class="btn sm pri" onclick="reloadView()">↻ Reload</button></div>
+      <div class="f"><label>&nbsp;</label><button class="btn sm" onclick="toggleLogin()">🔑 Get token</button></div>
+    </div>
+
+    <!-- TOKEN HELPER — talks to pizzasys, not to this app -->
+    <div class="conn" id="loginBar" style="display:none;top:106px;background:#f7f2ea">
+      <div class="f" style="flex:1;min-width:200px"><label>Auth server (pizzasys)</label>
+        <input id="authUrl" value="http://127.0.0.1:8001"></div>
+      <div class="f" style="flex:1;min-width:180px"><label>Email</label>
+        <input id="authEmail" type="email" autocomplete="username" placeholder="your pizzasys login"></div>
+      <div class="f" style="flex:1;min-width:150px"><label>Password</label>
+        <input id="authPass" type="password" autocomplete="current-password"></div>
+      <div class="f"><label>&nbsp;</label><button class="btn sm pri" onclick="doLogin()">Log in → fill token</button></div>
+      <div class="f" style="flex:2;min-width:220px"><label>&nbsp;</label>
+        <span style="font-size:11.5px;color:var(--muted)" id="loginMsg">
+          POSTs to <code>/api/v1/auth/login</code>. Nothing is stored but the returned token.</span></div>
+    </div>
+
+    <div class="wrap">
+
+      <!-- ══════════ DAILY PLAN ══════════ -->
+      <section id="v-plan" class="on">
+        <div class="note">
+          <b>This is the real flow.</b> The browser calls <code>[data]/dough-sauce/daily-plan</code> for the
+          four previous same-weekdays and their <code>base</code>, applies the manager's buffer here, and posts
+          only the result to <code>[audit]</code>. Three systems, one screen — exactly what the production
+          client does. The <b>Base</b> column stays editable so a figure can be forced when testing.
+        </div>
+
+        <div class="card">
+          <div class="h"><h3>GET /dough-sauce/stores/{store_id}/plan</h3>
+            <span class="sub">is this day confirmed?</span><div class="spacer"></div>
+            <button class="btn sm" onclick="loadPlan()">Send</button></div>
+          <div class="reqline" id="rq-plan"><span class="m">GET</span><span class="u">—</span><span class="st st0">idle</span></div>
+          <div class="b" id="planStatus"><span style="color:var(--muted)">Press Send.</span></div>
+          <details class="raw"><summary>Raw response</summary><pre class="json" id="raw-plan">—</pre></details>
+        </div>
+
+        <div class="card">
+          <div class="h"><h3>POST /dough-sauce/stores/{store_id}/plan</h3>
+            <span class="sub">store manager only · freezes buffer + plan</span></div>
+          <div class="b" style="padding:0">
+            <table id="planForm"><thead><tr>
+              <th>Ingredient</th><th class="num">÷ divisor</th>
+              <th class="num" style="width:130px">Base <small style="font-weight:400">(stand-in)</small></th>
+              <th class="num" style="width:110px">Buffer %</th>
+              <th class="num" style="width:140px">Planned qty</th></tr></thead><tbody></tbody></table>
+          </div>
+          <div class="b" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-top:1px solid var(--line)">
+            <span style="font-size:11.5px;color:var(--muted)" id="planHint">Load bootstrap first to get the ingredients.</span>
+            <div class="spacer"></div>
+            <button class="btn" onclick="loadBase()">⤓ Fetch base from data project</button>
+            <button class="btn" onclick="fillDemoBases()">Fill demo bases</button>
+            <button class="btn pri" onclick="confirmPlan()">✓ Confirm plan</button>
+          </div>
+          <div class="reqline" id="rq-base"><span class="m">GET</span><span class="u">—</span><span class="st st0">idle</span></div>
+          <div class="b" id="baseInfo" style="border-top:1px solid var(--line)">
+            <span style="color:var(--muted)">Press “Fetch base from data project”.</span></div>
+          <details class="raw"><summary>Raw response — data project</summary><pre class="json" id="raw-base">—</pre></details>
+          <div class="reqline" id="rq-confirm"><span class="m">POST</span><span class="u">—</span><span class="st st0">idle</span></div>
+          <details class="raw"><summary>Raw response</summary><pre class="json" id="raw-confirm">—</pre></details>
+        </div>
+      </section>
+
+      <!-- ══════════ ALL PLANS ══════════ -->
+      <section id="v-plans">
+        <div class="note">
+          <b>Who hasn't confirmed yet</b> — a question the Excel workbook could never answer, because a
+          spreadsheet doesn't know who opened it. Reads only our table: no call to the data project or the
+          inventory system. Rows are filtered by what your token may see.
+        </div>
+        <div class="card">
+          <div class="h"><h3>GET /dough-sauce/plans</h3><div class="spacer"></div>
+            <button class="btn sm" onclick="loadPlans()">Send</button></div>
+          <div class="reqline" id="rq-plans"><span class="m">GET</span><span class="u">—</span><span class="st st0">idle</span></div>
+          <div class="b"><div class="grid3" id="plansKpi"></div></div>
+          <div class="b" style="padding:0;border-top:1px solid var(--line)">
+            <table id="plansTable"><thead><tr><th>Store</th><th>Status</th>
+              <th class="num">18 OZ</th><th class="num">10 OZ</th><th class="num">Sauce</th>
+              <th>Buffers</th><th>Confirmed</th></tr></thead><tbody></tbody></table></div>
+          <details class="raw"><summary>Raw response</summary><pre class="json" id="raw-plans">—</pre></details>
+        </div>
+      </section>
+
+      <!-- ══════════ WEEK ══════════ -->
+      <section id="v-week">
+        <div class="note">
+          <b>Everything of ours one follow-up screen needs, in one call</b> — the week's plans, its judgement,
+          and the <b>previous three weeks' boundaries</b>. That last part is easy to miss: progress compares
+          this week against the average of the previous three, so the client needs those dates to fetch their
+          counts — and must not derive them itself.
+        </div>
+        <div class="card">
+          <div class="h"><h3>GET /dough-sauce/stores/{store_id}/week</h3><div class="spacer"></div>
+            <button class="btn sm" onclick="loadWeek()">Send</button>
+            <button class="btn sm pri" onclick="loadVariance()">⤓ + counts &amp; variance</button></div>
+          <div class="reqline" id="rq-week"><span class="m">GET</span><span class="u">—</span><span class="st st0">idle</span></div>
+          <div class="b" id="weekHead"><span style="color:var(--muted)">Press Send.</span></div>
+          <div class="b" style="padding:0;border-top:1px solid var(--line)">
+            <table id="weekTable"><thead><tr><th>Date</th><th>Ingredient</th>
+              <th class="num">Buffer %</th><th class="num">Planned</th></tr></thead><tbody></tbody></table></div>
+          <details class="raw"><summary>Raw response</summary><pre class="json" id="raw-week">—</pre></details>
+          <div class="reqline" id="rq-counts"><span class="m">GET</span><span class="u">—</span><span class="st st0">idle</span></div>
+          <div class="b" id="varianceBox" style="border-top:1px solid var(--line)">
+            <span style="color:var(--muted)">Press “+ counts &amp; variance” to pull the inventory system and
+            compute the grid here — the arithmetic the server never does.</span></div>
+          <details class="raw"><summary>Raw response — inventory</summary><pre class="json" id="raw-counts">—</pre></details>
+        </div>
+      </section>
+
+      <!-- ══════════ JUDGEMENTS ══════════ -->
+      <section id="v-judge">
+        <div class="note">
+          <b>One request for the whole follow-up grid.</b> <code>GET /plans?week_start=</code> returns every
+          visible store's week — plans, judgement and the previous weeks' boundaries. Without it this screen
+          would call <code>/stores/{id}/week</code> once per store: 44 requests, each triggering its own
+          token check against pizzasys.<br><br>
+          <b>The judgement is 40% of the score and the only thing the specialist writes.</b> No system holds it —
+          the data project doesn't know whether the stickers were applied, the inventory system doesn't know
+          whether the dough was any good. <b>"Judged" means both verdicts are in</b>; a half-filled row still
+          counts as pending.
+        </div>
+        <div class="card">
+          <div class="h"><h3>GET /dough-sauce/plans?week_start=</h3>
+            <span class="sub">whole week, every visible store, judgements folded in</span><div class="spacer"></div>
+            <button class="btn sm" onclick="loadJudgements()">Send</button></div>
+          <div class="reqline" id="rq-judge"><span class="m">GET</span><span class="u">—</span><span class="st st0">idle</span></div>
+          <div class="b"><div class="grid3" id="judgeKpi"></div></div>
+          <div class="b" style="padding:0;border-top:1px solid var(--line)">
+            <table id="judgeTable"><thead><tr><th>Store</th><th class="num">Days</th><th class="num">Lines</th>
+              <th>Stickers</th><th>Dough quality</th><th>Complete</th><th style="width:210px">Set</th></tr></thead><tbody></tbody></table></div>
+          <details class="raw"><summary>Raw response</summary><pre class="json" id="raw-judge">—</pre></details>
+          <div class="reqline" id="rq-judgeput"><span class="m">PUT</span><span class="u">—</span><span class="st st0">idle</span></div>
+          <details class="raw"><summary>Raw response — last PUT</summary><pre class="json" id="raw-judgeput">—</pre></details>
+        </div>
+      </section>
+
+      <!-- ══════════ RAW ══════════ -->
+      <section id="v-raw">
+        <div class="note">
+          Anything the pages above don't cover — wrong roles, malformed bodies, 404s.
+          The path is appended to the API base URL.
+        </div>
+        <div class="card">
+          <div class="h"><h3>Raw request</h3><div class="spacer"></div>
+            <select id="rawMethod" class="inp" style="width:100px">
+              <option>GET</option><option>POST</option><option>PUT</option><option>DELETE</option></select>
+            <input id="rawPath" class="inp" style="width:380px" value="/dough-sauce/bootstrap">
+            <button class="btn sm pri" onclick="sendRaw()">Send</button></div>
+          <div class="b">
+            <label style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:650">JSON body (POST/PUT)</label>
+            <textarea id="rawBody" class="inp mono" rows="8" style="margin-top:5px;resize:vertical"
+              placeholder='{"plan_date":"2026-09-25","lines":[…]}'></textarea>
+            <div style="display:flex;gap:7px;margin-top:9px;flex-wrap:wrap">
+              <button class="btn sm" onclick="rawPreset('plan')">↳ confirm plan</button>
+              <button class="btn sm" onclick="rawPreset('judge')">↳ judgement</button>
+              <button class="btn sm" onclick="rawPreset('badweek')">↳ bad week_start (422)</button>
+              <button class="btn sm" onclick="rawPreset('badstore')">↳ unknown store (404)</button>
+              <button class="btn sm" onclick="rawPreset('badbuffer')">↳ buffer 500% (422)</button>
+            </div>
+          </div>
+          <div class="reqline" id="rq-raw"><span class="m">GET</span><span class="u">—</span><span class="st st0">idle</span></div>
+          <details class="raw" open><summary>Raw response</summary><pre class="json" id="raw-raw">—</pre></details>
+        </div>
+      </section>
+
+    </div>
+  </main>
+</div>
+<div id="toast"></div>
+
+<script>
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+
+/* ─────────────── connection ─────────────── */
+(function(){
+  const o=location.origin.startsWith('http')?location.origin:'http://127.0.0.1:8000';
+  $('#baseUrl').value=(localStorage.getItem('ds_base')||o+'/api');
+  $('#dataUrl').value=(localStorage.getItem('ds_dataUrl')||'http://127.0.0.1:8003/api');
+  $('#invUrl').value =(localStorage.getItem('ds_invUrl') ||'http://127.0.0.1:8002/api');
+  $('#token').value=localStorage.getItem('ds_token')||'';
+  $('#storeId').value=localStorage.getItem('ds_store')||'03795-00001';
+  const t=new Date(); t.setDate(t.getDate()+1);      // plans are made for TOMORROW
+  $('#planDate').value=iso(t);
+})();
+function iso(d){return new Date(d.getTime()-d.getTimezoneOffset()*6e4).toISOString().slice(0,10);}
+
+const cfg={
+  base:()=>$('#baseUrl').value.replace(/\/$/,''),
+  // The two systems the browser talks to directly. In the real client these are
+  // build-time config; here they are fields so a wrong one is obvious.
+  data:()=>$('#dataUrl').value.replace(/\/$/,''),
+  inv: ()=>$('#invUrl').value.replace(/\/$/,''),
+  token:()=>$('#token').value.trim(),
+  store:()=>$('#storeId').value.trim(),
+  date:()=>$('#planDate').value,
+  week:()=>$('#weekStart').value,
+};
+['baseUrl','dataUrl','invUrl','token','storeId'].forEach(id=>$('#'+id).onchange=()=>{
+  localStorage.setItem('ds_'+({baseUrl:'base',dataUrl:'dataUrl',invUrl:'invUrl',token:'token',storeId:'store'})[id],$('#'+id).value);
+  if(id==='baseUrl'||id==='token') populateWeeks();
+});
+
+function conn(ok){const d=$('#connDot');d.className='dot'+(ok?' ok':' bad');$('#connTxt').textContent=ok?'connected':'error';}
+function toast(m,bad){const e=document.createElement('div');e.className='tst'+(bad?' bad':'');e.textContent=m;
+  $('#toast').appendChild(e);setTimeout(()=>e.remove(),5200);}
+
+/* The one place that talks to the API. Every view shows the request line it
+   produced, so a 401/403/422 is readable without opening devtools. */
+async function api(method,path,{query,body,origin}={},reqId){
+  let url=(origin||cfg.base())+path;
+  if(query){const q=new URLSearchParams(query).toString();if(q)url+='?'+q;}
+  const headers={'Accept':'application/json'};
+  const t=cfg.token(); if(t) headers.Authorization='Bearer '+t;
+  let b; if(body){headers['Content-Type']='application/json';b=JSON.stringify(body);}
+  const t0=performance.now();
+  if(reqId) setReq(reqId,method,url,'…','st0');
+  try{
+    const res=await fetch(url,{method,headers,body:b});
+    const txt=await res.text(); let data; try{data=JSON.parse(txt);}catch{data=txt;}
+    const ms=Math.round(performance.now()-t0);
+    conn(res.ok);
+    if(reqId) setReq(reqId,method,url,res.status+' · '+ms+'ms','st'+String(res.status)[0]);
+    if(!res.ok) toast(`${res.status} ${method} ${path} — ${briefErr(data)}`,true);
+    return {status:res.status,ok:res.ok,data};
+  }catch(e){
+    conn(false);
+    if(reqId) setReq(reqId,method,url,'network','st0');
+    toast('Network/CORS error. Open this page from the app (php artisan serve → /dough-sauce-app.html).',true);
+    return {status:0,ok:false,data:null};
+  }
+}
+function setReq(id,m,u,st,cls){
+  const el=$('#rq-'+id); if(!el) return;
+  el.querySelector('.m').textContent=m;
+  // Show which system answered — with three origins in play, a bare path is
+  // ambiguous and a CORS failure looks identical to a routing mistake.
+  el.querySelector('.u').textContent=u
+    .replace(cfg.base(),'[audit]').replace(cfg.data(),'[data]').replace(cfg.inv(),'[inv]');
+  const s=el.querySelector('.st'); s.textContent=st; s.className='st '+cls;
+}
+function briefErr(d){
+  if(!d) return 'error';
+  if(typeof d==='string') return d.slice(0,140);
+  let m=d.message||'';
+  if(d.errors) m+=' · '+Object.values(d.errors).flat().join('; ');
+  return (m||JSON.stringify(d)).slice(0,200);
+}
+function show(id,data){ $('#raw-'+id).textContent = data==null?'—':JSON.stringify(data,null,2); }
+const n=(v,d=2)=>v==null?'—':Number(v).toFixed(d);
+
+/* ─────────────── token helper ───────────────
+   Every route here sits behind AuthTokenStoreScopeMiddleware, which forwards the
+   token to pizzasys on each call — so without one, every endpoint returns 401 and
+   this page can test nothing. This fetches a real token from the auth server so
+   you don't have to round-trip through another tool.
+
+   It posts straight to pizzasys, never to this app; only the returned token is
+   kept, in the field above. The password is not stored or echoed anywhere. */
+function toggleLogin(){
+  const b=$('#loginBar'); b.style.display = b.style.display==='none' ? 'flex' : 'none';
+}
+async function doLogin(){
+  const url=$('#authUrl').value.replace(/\/$/,'')+'/api/v1/auth/login';
+  const msg=$('#loginMsg');
+  msg.textContent='…';
+  try{
+    const res=await fetch(url,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Accept':'application/json'},
+      body:JSON.stringify({email:$('#authEmail').value,password:$('#authPass').value,client_type:'web'}),
+    });
+    const d=await res.json();
+    // AuthService::login returns ['token' => $plainTextToken, ...] under `data`.
+    const tok=d?.data?.token||d?.token||d?.data?.access_token;
+    if(!res.ok||!tok){ msg.innerHTML='<span style="color:var(--fail)">'+(d?.message||'login failed ('+res.status+')')+'</span>'; return; }
+    $('#token').value=tok;
+    localStorage.setItem('ds_token',tok);
+    $('#authPass').value='';
+    msg.innerHTML='<span style="color:var(--pass)">Token filled'+(d?.data?.user?.name?' — '+d.data.user.name:'')+'. Press ↻ Reload.</span>';
+    toast('Token acquired.');
+    populateWeeks().then(()=>reloadView());
+  }catch(e){
+    msg.innerHTML='<span style="color:var(--fail)">Could not reach the auth server. Is it running on that URL?</span>';
+  }
+}
+
+/* ─────────────── week picker (served by the API) ─────────────── */
+// Deliberately NOT computed here. See the note on the Periods view.
+let WEEKS=[];
+// There is no config endpoint to ask. Every read carries a `weeks` list, so the
+// picker is filled from whatever response came back last — and because the period
+// parameters are optional, the first of those reads needs no week to begin with.
+function applyWeeks(weeks){
+  if(!Array.isArray(weeks)||!weeks.length) return;
+  WEEKS=weeks;
+  const keep=$('#weekStart').value;
+  const sel=weeks.some(w=>w.week_start===keep) ? keep : (weeks.find(w=>w.current)||weeks[0]).week_start;
+  $('#weekStart').innerHTML=weeks.map(o=>
+    `<option value="${o.week_start}"${o.week_start===sel?' selected':''}>${o.label} · ${o.week_start}</option>`).join('');
+}
+async function populateWeeks(){
+  // Any read will do — this one asks for nothing but the week list.
+  const r=await api('GET','/dough-sauce/plans',{query:{weeks_span:8}});
+  if(!r.ok||!r.data?.weeks){ $('#weekStart').innerHTML='<option value="">— paste a token, then ↻</option>'; return; }
+  applyWeeks(r.data.weeks);
+}
+
+/* ─────────────── nav ─────────────── */
+const TITLES={plan:['Store manager','Daily plan'],plans:['Specialist','All plans'],
+  week:['Specialist','Store week'],judge:['Specialist','Week grid + judgements'],raw:['Tools','Raw request']};
+let VIEW='plan';
+$$('.nav button').forEach(b=>b.onclick=()=>{
+  VIEW=b.dataset.v;
+  $$('.nav button').forEach(x=>x.classList.toggle('on',x===b));
+  $$('section').forEach(s=>s.classList.toggle('on',s.id==='v-'+VIEW));
+  $('#crumb').textContent=TITLES[VIEW][0]; $('#title').textContent=TITLES[VIEW][1];
+});
+function reloadView(){
+  populateWeeks();
+  ({plan:loadPlan,plans:loadPlans,week:loadWeek,judge:loadJudgements,raw:()=>{}}[VIEW])();
+}
+
+// The ingredient list used to come from /bootstrap. It now belongs where its
+// truth is — LC_PIZZA_DATA — so this tester keeps a local copy rather than
+// inventing a backend endpoint to serve it.
+const BOOT={ingredients:[
+  {key:'dough_18oz',name:'18 OZ Dough ball', unit:'ball',      divisor:1,  inventory_ref:'0000'},
+  {key:'dough_10oz',name:'10 OZ Dough balls',unit:'ball',      divisor:12, inventory_ref:'00001'},
+  {key:'sauce',     name:'Sauce containers', unit:'container', divisor:80, inventory_ref:'00002'},
+]};
+// The Base column stands in for LC_PIZZA_DATA, which isn't built yet. The real
+// client will fetch it; the multiplication below is identical either way.
+const DEMO_BASE={dough_18oz:619.75, dough_10oz:7.9271, sauce:9.1313};
+function renderPlanForm(defaults){
+  const tb=$('#planForm tbody');
+  tb.innerHTML=BOOT.ingredients.map(i=>{
+    const buf=(defaults&&defaults[i.key]!=null)?defaults[i.key]:10;
+    return `<tr data-k="${i.key}">
+      <td><b>${i.name}</b><br><code style="font-size:11px;color:var(--muted)">${i.key}</code></td>
+      <td class="num">${i.divisor}</td>
+      <td class="num"><input class="inp base" type="number" step="0.0001" placeholder="from data project"></td>
+      <td class="num"><input class="inp buf" type="number" step="1" min="0" value="${buf}"></td>
+      <td class="num"><b class="plannedOut">—</b></td></tr>`;
+  }).join('');
+  tb.oninput=recalcPlan;
+  $('#planHint').textContent='planned = base × (1 + buffer/100) — computed in this page, exactly as the real client will.';
+}
+function recalcPlan(){
+  $$('#planForm tbody tr').forEach(tr=>{
+    const base=parseFloat(tr.querySelector('.base').value);
+    const buf=parseFloat(tr.querySelector('.buf').value);
+    const out=tr.querySelector('.plannedOut');
+    out.textContent=(isNaN(base)||isNaN(buf))?'—':(base*(1+buf/100)).toFixed(4);
+  });
+}
+function fillDemoBases(){
+  $$('#planForm tbody tr').forEach(tr=>{
+    const k=tr.dataset.k; if(DEMO_BASE[k]!=null) tr.querySelector('.base').value=DEMO_BASE[k];
+  });
+  recalcPlan();
+}
+
+/**
+ * Fetch the base figures from LC_PIZZA_DATA — the call the production client makes.
+ *
+ * Note what does NOT happen: this never asks AuditApp for a sales number. Our
+ * server does not hold one and does not proxy for one.
+ */
+async function loadBase(){
+  const r=await api('GET','/dough-sauce/daily-plan',{
+    origin:cfg.data(),
+    query:{store:cfg.store(),date:cfg.date(),lookback:4,include_refunded:'false'},
+  },'base');
+  show('base',r.data);
+  const box=$('#baseInfo');
+  if(!r.ok){ box.innerHTML='<span style="color:var(--fail)">'+briefErr(r.data)+'</span>'; return; }
+
+  const d=r.data;
+  (d.ingredients||[]).forEach(ing=>{
+    const tr=$$('#planForm tbody tr').find(t=>t.dataset.k===ing.key);
+    if(tr){ tr.querySelector('.base').value=ing.base; }
+  });
+  recalcPlan();
+
+  const unmapped=d.unmapped||[];
+  box.innerHTML=`
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:${unmapped.length?'10px':'0'}">
+      <span class="pill info">${d.weekday}</span>
+      <span style="font-size:12px;color:var(--muted)">source dates:
+        ${(d.source_dates||[]).map(x=>`<code>${x}</code>`).join(' · ')}</span>
+      <span class="pill ${d.days_found===d.lookback?'ok':'pend'}">days_found ${d.days_found}/${d.lookback}</span>
+    </div>
+    ${unmapped.length?`
+      <div class="note warn" style="margin:0">
+        <b>⚠️ ${unmapped.length} item(s) sold with no recipe — counted as ZERO.</b><br>
+        ${unmapped.map(u=>`${u.name} <code>${u.item_id}</code> · ${u.account} · <b>${u.quantity}</b>`).join('<br>')}
+        <br><br>This is the bug the spreadsheet hid with <code>IFERROR(..., 0)</code>. The plan below is short
+        by whatever these would have consumed.
+      </div>`:'<span class="pill ok">every sold item has a recipe</span>'}`;
+}
+async function loadPlan(){
+  const r=await api('GET',`/dough-sauce/stores/${cfg.store()}/plan`,{query:{date:cfg.date()}},'plan');
+  show('plan',r.data);
+  applyWeeks(r.data?.data?.weeks);
+  if(!r.ok){ $('#planStatus').innerHTML='<span style="color:var(--fail)">'+briefErr(r.data)+'</span>'; return; }
+  const d=r.data.data;
+  if(d.confirmed){
+    $('#planStatus').innerHTML=`
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+        <span class="pill ok">confirmed</span>
+        <span style="font-size:12px;color:var(--muted)">by <b>${d.confirmed_by?.name||'—'}</b> · ${d.confirmed_at||''}</span>
+      </div>
+      <table><thead><tr><th>Ingredient</th><th class="num">Buffer %</th><th class="num">Planned</th>
+        <th class="num">Base <small style="font-weight:400">(derived)</small></th></tr></thead>
+      <tbody>${d.lines.map(l=>`<tr><td><code>${l.ingredient_key}</code></td>
+        <td class="num">${n(l.buffer_pct)}</td><td class="num"><b>${n(l.planned_qty,4)}</b></td>
+        <td class="num" style="color:var(--muted)">${n(l.base_qty,4)}</td></tr>`).join('')}</tbody></table>
+      <div style="font-size:11.5px;color:var(--muted);margin-top:9px">
+        base is not a column — it is <code>planned ÷ (1 + buffer/100)</code>, recovered on read.</div>`;
+    renderPlanForm(Object.fromEntries(d.lines.map(l=>[l.ingredient_key,l.buffer_pct])));
+  }else{
+    $('#planStatus').innerHTML=`
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span class="pill pend">not confirmed</span>
+        <span style="font-size:12px;color:var(--muted)">
+          default buffers suggested: ${Object.entries(d.default_buffers||{}).map(([k,v])=>`<code>${k}</code> ${v}%`).join(' · ')}
+        </span>
+      </div>
+      <div style="font-size:11.5px;color:var(--muted);margin-top:8px">
+        Those come from this store's most recent confirmed plan, falling back to config —
+        "the buffer you last actually used".</div>`;
+    renderPlanForm(d.default_buffers);
+  }
+}
+async function confirmPlan(){
+  const lines=$$('#planForm tbody tr').map(tr=>({
+    ingredient_key:tr.dataset.k,
+    buffer_pct:parseFloat(tr.querySelector('.buf').value),
+    planned_qty:parseFloat(tr.querySelector('.plannedOut').textContent),
+  }));
+  if(lines.some(l=>isNaN(l.planned_qty)||isNaN(l.buffer_pct))){
+    toast('Fill a base and a buffer for all three ingredients (try "Fill demo bases").',true); return;
+  }
+  const r=await api('POST',`/dough-sauce/stores/${cfg.store()}/plan`,
+    {body:{plan_date:cfg.date(),lines}},'confirm');
+  show('confirm',r.data);
+  if(r.ok){ toast('Plan confirmed — buffer and quantity are now frozen on these rows.'); loadPlan(); }
+}
+
+/* ─────────────── all plans ─────────────── */
+async function loadPlans(){
+  const r=await api('GET','/dough-sauce/plans',{query:{date:cfg.date()}},'plans');
+  show('plans',r.data);
+  applyWeeks(r.data?.weeks);
+  const tb=$('#plansTable tbody');
+  if(!r.ok){ $('#plansKpi').innerHTML=''; tb.innerHTML='<tr><td colspan="7" style="color:var(--fail)">'+briefErr(r.data)+'</td></tr>'; return; }
+  const s=r.data.summary;
+  $('#plansKpi').innerHTML=`
+    <div class="kpi"><div class="k">Stores visible</div><div class="v">${s.total}</div><div class="s">filtered by your token</div></div>
+    <div class="kpi"><div class="k">Confirmed</div><div class="v" style="color:var(--pass)">${s.confirmed}</div><div class="s">for ${r.data.date}</div></div>
+    <div class="kpi"><div class="k">Pending</div><div class="v" style="color:${s.pending?'var(--fail)':'var(--pass)'}">${s.pending}</div><div class="s">need a reminder</div></div>`;
+  const get=(ls,k)=>{const l=ls.find(x=>x.ingredient_key===k);return l?n(l.planned_qty,2):'—';};
+  tb.innerHTML=r.data.stores.map(st=>`<tr>
+    <td><b>${st.store}</b><br><small style="color:var(--muted)">id ${st.store_id}</small></td>
+    <td>${st.confirmed?'<span class="pill ok">confirmed</span>':'<span class="pill pend">pending</span>'}</td>
+    <td class="num">${get(st.lines,'dough_18oz')}</td>
+    <td class="num">${get(st.lines,'dough_10oz')}</td>
+    <td class="num">${get(st.lines,'sauce')}</td>
+    <td style="font-size:11.5px;color:var(--muted)">${st.lines.map(l=>n(l.buffer_pct,0)+'%').join(' · ')||'—'}</td>
+    <td style="font-size:11.5px">${st.confirmed_by||'—'}<br><small style="color:var(--muted)">${st.confirmed_at||''}</small></td>
+  </tr>`).join('')||'<tr><td colspan="7" style="color:var(--muted)">No stores visible to this token.</td></tr>';
+}
+
+/* ─────────────── week ─────────────── */
+async function loadWeek(){
+  if(!cfg.week()){ toast('Pick an accounting week (press ↻ Reload to load the list).',true); return; }
+  const r=await api('GET',`/dough-sauce/stores/${cfg.store()}/week`,{query:{week_start:cfg.week()}},'week');
+  show('week',r.data);
+  applyWeeks(r.data?.weeks);
+  if(!r.ok){ $('#weekHead').innerHTML='<span style="color:var(--fail)">'+briefErr(r.data)+'</span>'; return; }
+  const d=r.data, j=d.judgement;
+  $('#weekHead').innerHTML=`
+    <div class="grid3">
+      <div class="kpi"><div class="k">Week</div><div class="v">${d.week.week_no}</div>
+        <div class="s">${d.week.week_start} → ${d.week.week_end} · P${d.week.period_no} · FY${d.week.fiscal_year}</div></div>
+      <div class="kpi"><div class="k">Confirmed lines</div><div class="v">${d.plans.length}<small style="font-size:14px;color:var(--muted)"> / 21</small></div>
+        <div class="s">7 days × 3 ingredients</div></div>
+      <div class="kpi"><div class="k">Judgement</div>
+        <div class="v" style="font-size:16px">${j?`${j.stickers_compliance??'—'} · ${j.dough_quality??'—'}`:'not judged'}</div>
+        <div class="s">${j?('by '+(j.judged_by||'—')):'the specialist\'s 40%'}</div></div>
+    </div>
+    <div style="margin-top:12px;font-size:12px">
+      <b>previous_weeks</b> (the progress figure needs these):
+      ${d.previous_weeks.map(w=>`<code>${w.week_start}</code> <small style="color:var(--muted)">w${w.week_no}</small>`).join(' · ')}
+    </div>`;
+  $('#weekTable tbody').innerHTML=d.plans.length? d.plans.map(p=>`<tr>
+    <td>${p.plan_date}</td><td><code>${p.ingredient_key}</code></td>
+    <td class="num">${n(p.buffer_pct)}</td><td class="num"><b>${n(p.planned_qty,4)}</b></td></tr>`).join('')
+    : '<tr><td colspan="4" style="color:var(--muted)">No confirmed plans in this week.</td></tr>';
+}
+
+/**
+ * Plan vs counted, computed in the browser.
+ *
+ * This is the whole architecture in one function: the plans come from AuditApp,
+ * the counts come from the inventory system, and the subtraction happens here.
+ * Neither server knows the other exists, and neither one ever computed a variance.
+ */
+async function loadVariance(){
+  if(!cfg.week()){ toast('Pick an accounting week first.',true); return; }
+
+  const wk=await api('GET',`/dough-sauce/stores/${cfg.store()}/week`,{query:{week_start:cfg.week()}},'week');
+  show('week',wk.data); applyWeeks(wk.data?.weeks);
+  if(!wk.ok) return;
+
+  const refs=BOOT.ingredients.map(i=>i.inventory_ref).join(',');
+  // Store in the PATH, like every other store-scoped route in that service —
+  // so pizzasys authorizes it with the same auth_rules shape as the rest.
+  const inv=await api('GET',`/inventory/stores/${cfg.store()}/counts`,{
+    origin:cfg.inv(),
+    query:{date_from:wk.data.week.week_start,date_to:wk.data.week.week_end,
+           ultimatrix_ids:refs},
+  },'counts');
+  show('counts',inv.data);
+
+  const box=$('#varianceBox');
+  if(!inv.ok){ box.innerHTML='<span style="color:var(--fail)">inventory: '+briefErr(inv.data)+'</span>'; return; }
+
+  // ultimatrix_id -> our ingredient key. The two systems share no vocabulary;
+  // this single line is the whole integration between them.
+  const byRef={}; BOOT.ingredients.forEach(i=>byRef[i.inventory_ref]=i.key);
+
+  const counted={};
+  (inv.data.data||[]).forEach(r=>{ counted[r.date+'|'+byRef[r.ultimatrix_id]]=r.total_in_unit_1; });
+
+  const planned={};
+  (wk.data.plans||[]).forEach(p=>{ planned[p.plan_date+'|'+p.ingredient_key]=p.planned_qty; });
+
+  const days=[]; let d=new Date(wk.data.week.week_start+'T00:00:00');
+  for(let i=0;i<7;i++){ days.push(iso(d)); d.setDate(d.getDate()+1); }
+
+  let ok=0,total=0,rows='';
+  days.forEach(day=>{
+    rows+=`<tr><td><b>${day}</b></td>`;
+    BOOT.ingredients.forEach(ing=>{
+      const p=planned[day+'|'+ing.key], c=counted[day+'|'+ing.key];
+      if(p==null){ rows+='<td class="num" style="color:var(--muted)">no plan</td>'; return; }
+      total++;
+      if(c==null){ rows+=`<td class="num"><span class="pill mut">no count</span><br>
+        <small style="color:var(--muted)">plan ${n(p,1)}</small></td>`; return; }
+      const v=c-p; if(v>=0) ok++;
+      rows+=`<td class="num" style="background:${v>=0?'var(--pass-bg)':'var(--fail-bg)'}">
+        <b style="color:${v>=0?'var(--pass)':'var(--fail)'}">${v>=0?'+':''}${n(v,1)}</b><br>
+        <small style="color:var(--muted)">${n(p,1)} → ${n(c,1)}</small></td>`;
+    });
+    rows+='</tr>';
+  });
+
+  const W={v:0.6,s:0.2,q:0.2};
+  const j=wk.data.judgement;
+  const variancePart=W.v*(ok/21);
+  const score=variancePart+(j?.stickers_compliance==='yes'?W.s:0)+(j?.dough_quality==='pass'?W.q:0);
+  const missing=(inv.data.meta?.missing||[]).length;
+
+  box.innerHTML=`
+    <div class="grid3" style="margin-bottom:12px">
+      <div class="kpi"><div class="k">Cells on target</div><div class="v">${ok}<small style="font-size:14px;color:var(--muted)">/21</small></div>
+        <div class="s">${total} of 21 have a plan</div></div>
+      <div class="kpi"><div class="k">Variance part (60%)</div><div class="v">${variancePart.toFixed(4)}</div>
+        <div class="s">0.6 × (${ok} ÷ 21)</div></div>
+      <div class="kpi"><div class="k">Score</div><div class="v">${(score*100).toFixed(1)}%</div>
+        <div class="s">${j?`stickers ${j.stickers_compliance??'—'} · quality ${j.dough_quality??'—'}`:'not judged — 40% missing'}</div></div>
+      <div class="kpi"><div class="k">Counts missing</div><div class="v" style="color:${missing?'var(--pend)':'var(--pass)'}">${missing}</div>
+        <div class="s">reported, never assumed zero</div></div>
+    </div>
+    <table><thead><tr><th>Date</th>${BOOT.ingredients.map(i=>`<th class="num">${i.name}</th>`).join('')}</tr></thead>
+    <tbody>${rows}</tbody></table>
+    <div style="font-size:11.5px;color:var(--muted);margin-top:9px">
+      Plans from <b>[audit]</b>, counts from <b>[inv]</b>, subtraction and score computed in this page.
+      Neither server did any of it.</div>`;
+}
+
+/* ─────────────── judgements ─────────────── */
+async function loadJudgements(){
+  if(!cfg.week()){ toast('Pick an accounting week (press ↻ Reload to load the list).',true); return; }
+  const r=await api('GET','/dough-sauce/plans',{query:{week_start:cfg.week()}},'judge');
+  show('judge',r.data);
+  applyWeeks(r.data?.weeks);
+  const tb=$('#judgeTable tbody');
+  if(!r.ok){ $('#judgeKpi').innerHTML=''; tb.innerHTML='<tr><td colspan="7" style="color:var(--fail)">'+briefErr(r.data)+'</td></tr>'; return; }
+  const s=r.data.summary;
+  $('#judgeKpi').innerHTML=`
+    <div class="kpi"><div class="k">Stores visible</div><div class="v">${s.total}</div>
+      <div class="s">week ${r.data.week.week_no} · ${r.data.week.week_start}</div></div>
+    <div class="kpi"><div class="k">Fully confirmed</div><div class="v">${s.fully_confirmed}</div>
+      <div class="s">${s.lines_expected} lines = 7 days × 3</div></div>
+    <div class="kpi"><div class="k">Judged</div><div class="v" style="color:var(--pass)">${s.judged}</div><div class="s">both verdicts in</div></div>
+    <div class="kpi"><div class="k">Pending judgement</div>
+      <div class="v" style="color:${s.pending_judgement?'var(--pend)':'var(--pass)'}">${s.pending_judgement}</div>
+      <div class="s">includes half-filled</div></div>
+    <div class="kpi"><div class="k">Previous weeks</div><div class="v" style="font-size:13px">
+      ${r.data.previous_weeks.map(w=>w.week_start).join('<br>')}</div><div class="s">progress needs these</div></div>`;
+  tb.innerHTML=r.data.stores.map(st=>{
+    const j=st.judgement;
+    return `<tr>
+      <td><b>${st.store}</b></td>
+      <td class="num">${st.days_confirmed}<small style="color:var(--muted)">/7</small></td>
+      <td class="num">${st.lines_total}<small style="color:var(--muted)">/${s.lines_expected}</small></td>
+      <td>${pillYN(j?.stickers_compliance,'yes')}</td>
+      <td>${pillYN(j?.dough_quality,'pass')}</td>
+      <td>${j&&j.complete?'<span class="pill ok">complete</span>':'<span class="pill pend">pending</span>'}</td>
+      <td style="white-space:nowrap">
+        <button class="btn sm" onclick="putJudgement('${st.store}','yes','pass')">yes · pass</button>
+        <button class="btn sm" onclick="putJudgement('${st.store}','no','fail')">no · fail</button>
+        <button class="btn sm" onclick="putJudgement('${st.store}','yes',null)">half</button>
+      </td></tr>`;
+  }).join('')||'<tr><td colspan="7" style="color:var(--muted)">No stores visible to this token.</td></tr>';
+}
+function pillYN(v,good){ if(v==null||v===undefined) return '<span class="pill mut">—</span>';
+  return `<span class="pill ${v===good?'ok':'no'}">${v}</span>`; }
+async function putJudgement(storeKey,stickers,quality){
+  const r=await api('PUT',`/dough-sauce/stores/${storeKey}/judgement`,
+    {body:{week_start:cfg.week(),stickers_compliance:stickers,dough_quality:quality}},'judgeput');
+  show('judgeput',r.data);
+  if(r.ok){ toast('Judgement saved for '+storeKey); loadJudgements(); }
+}
+
+/* ─────────────── raw ─────────────── */
+function rawPreset(k){
+  const store=cfg.store(), date=cfg.date(), week=cfg.week()||'2026-09-22';
+  const P={
+    plan:['POST',`/dough-sauce/stores/${store}/plan`,{plan_date:date,lines:[
+      {ingredient_key:'dough_18oz',buffer_pct:10,planned_qty:681.725},
+      {ingredient_key:'dough_10oz',buffer_pct:10,planned_qty:8.7198},
+      {ingredient_key:'sauce',buffer_pct:50,planned_qty:13.6969}]}],
+    judge:['PUT',`/dough-sauce/stores/${store}/judgement`,
+      {week_start:week,stickers_compliance:'yes',dough_quality:'pass'}],
+    // Wednesday, not Tuesday — the unique key is (store, week_start), so an
+    // off-by-one day would open a SECOND judgement for the same week.
+    badweek:['PUT',`/dough-sauce/stores/${store}/judgement`,
+      {week_start:'2026-09-23',stickers_compliance:'yes'}],
+    badstore:['GET','/dough-sauce/stores/99999-99999/plan?date='+date,null],
+    badbuffer:['POST',`/dough-sauce/stores/${store}/plan`,{plan_date:date,lines:[
+      {ingredient_key:'dough_18oz',buffer_pct:500,planned_qty:681.725},
+      {ingredient_key:'dough_10oz',buffer_pct:10,planned_qty:8.7198},
+      {ingredient_key:'sauce',buffer_pct:50,planned_qty:13.6969}]}],
+  }[k];
+  $('#rawMethod').value=P[0]; $('#rawPath').value=P[1];
+  $('#rawBody').value=P[2]?JSON.stringify(P[2],null,2):'';
+}
+async function sendRaw(){
+  const m=$('#rawMethod').value, p=$('#rawPath').value.trim();
+  let body=null; const t=$('#rawBody').value.trim();
+  if(t){ try{ body=JSON.parse(t); }catch(e){ toast('Body is not valid JSON.',true); return; } }
+  const r=await api(m,p,{body},'raw');
+  show('raw',r.data);
+}
+
+/* ─────────────── boot ─────────────── */
+renderPlanForm();
+populateWeeks().then(loadPlan);
+</script>
+</body>
+</html>
