@@ -176,14 +176,14 @@
       <!-- ══════════ DAILY PLAN ══════════ -->
       <section id="v-plan" class="on">
         <div class="note">
-          <b>This is the real flow.</b> The browser calls <code>[data]/stores/{store}/daily-plan</code> for the
+          <b>This is the real flow.</b> The browser calls <code>[data]/stores/{store}/dough-sauce/daily-plan</code> for the
           four previous same-weekdays and their <code>base</code>, applies the manager's buffer here, and posts
           only the result to <code>[audit]</code>. Three systems, one screen — exactly what the production
           client does. The <b>Base</b> column stays editable so a figure can be forced when testing.
         </div>
 
         <div class="card">
-          <div class="h"><h3>GET /stores/{store_id}/plan</h3>
+          <div class="h"><h3>GET /stores/{store_id}/dough-sauce/plan</h3>
             <span class="sub">is this day confirmed?</span><div class="spacer"></div>
             <button class="btn sm" onclick="loadPlan()">Send</button></div>
           <div class="reqline" id="rq-plan"><span class="m">GET</span><span class="u">—</span><span class="st st0">idle</span></div>
@@ -192,7 +192,7 @@
         </div>
 
         <div class="card">
-          <div class="h"><h3>POST /stores/{store_id}/plan</h3>
+          <div class="h"><h3>POST /stores/{store_id}/dough-sauce/plan</h3>
             <span class="sub">store manager only · freezes buffer + plan</span></div>
           <div class="b" style="padding:0">
             <table id="planForm"><thead><tr>
@@ -246,7 +246,7 @@
           counts — and must not derive them itself.
         </div>
         <div class="card">
-          <div class="h"><h3>GET /stores/{store_id}/week</h3><div class="spacer"></div>
+          <div class="h"><h3>GET /stores/{store_id}/dough-sauce/week</h3><div class="spacer"></div>
             <button class="btn sm" onclick="loadWeek()">Send</button>
             <button class="btn sm pri" onclick="loadVariance()">⤓ + counts &amp; variance</button></div>
           <div class="reqline" id="rq-week"><span class="m">GET</span><span class="u">—</span><span class="st st0">idle</span></div>
@@ -268,7 +268,7 @@
         <div class="note">
           <b>One request for the whole follow-up grid.</b> <code>GET /plans?week_start=</code> returns every
           visible store's week — plans, judgement and the previous weeks' boundaries. Without it this screen
-          would call <code>/stores/{id}/week</code> once per store: 44 requests, each triggering its own
+          would call <code>/stores/{id}/dough-sauce/week</code> once per store: 44 requests, each triggering its own
           token check against pizzasys.<br><br>
           <b>The judgement is 40% of the score and the only thing the specialist writes.</b> No system holds it —
           the data project doesn't know whether the stickers were applied, the inventory system doesn't know
@@ -605,7 +605,7 @@ function fillDemoBases(){
 async function loadBase(){
   // Store in the PATH here too — same reason as the inventory route: it is the
   // shape pizzasys' auth_rules are written against in that project.
-  const r=await api('GET',`/stores/${cfg.store()}/daily-plan`,{
+  const r=await api('GET',`/stores/${cfg.store()}/dough-sauce/daily-plan`,{
     origin:cfg.data(),
     query:{date:cfg.date(),lookback:4,include_refunded:'false'},
   },'base');
@@ -637,7 +637,7 @@ async function loadBase(){
       </div>`:'<span class="pill ok">every sold item has a recipe</span>'}`;
 }
 async function loadPlan(){
-  const r=await api('GET',`/stores/${cfg.store()}/plan`,{query:{date:cfg.date()}},'plan');
+  const r=await api('GET',`/stores/${cfg.store()}/dough-sauce/plan`,{query:{date:cfg.date()}},'plan');
   show('plan',r.data);
   applyWeeks(r.data?.data?.weeks);
   if(!r.ok){ $('#planStatus').innerHTML='<span style="color:var(--fail)">'+briefErr(r.data)+'</span>'; return; }
@@ -679,7 +679,7 @@ async function confirmPlan(){
   if(lines.some(l=>isNaN(l.planned_qty)||isNaN(l.buffer_pct))){
     toast('Fill a base and a buffer for all three ingredients (try "Fill demo bases").',true); return;
   }
-  const r=await api('POST',`/stores/${cfg.store()}/plan`,
+  const r=await api('POST',`/stores/${cfg.store()}/dough-sauce/plan`,
     {body:{plan_date:cfg.date(),lines}},'confirm');
   show('confirm',r.data);
   if(r.ok){ toast('Plan confirmed — buffer and quantity are now frozen on these rows.'); loadPlan(); }
@@ -712,7 +712,7 @@ async function loadPlans(){
 /* ─────────────── week ─────────────── */
 async function loadWeek(){
   if(!cfg.week()){ toast('Pick an accounting week (press ↻ Reload to load the list).',true); return; }
-  const r=await api('GET',`/stores/${cfg.store()}/week`,{query:{week_start:cfg.week()}},'week');
+  const r=await api('GET',`/stores/${cfg.store()}/dough-sauce/week`,{query:{week_start:cfg.week()}},'week');
   show('week',r.data);
   applyWeeks(r.data?.weeks);
   if(!r.ok){ $('#weekHead').innerHTML='<span style="color:var(--fail)">'+briefErr(r.data)+'</span>'; return; }
@@ -747,7 +747,7 @@ async function loadWeek(){
 async function loadVariance(){
   if(!cfg.week()){ toast('Pick an accounting week first.',true); return; }
 
-  const wk=await api('GET',`/stores/${cfg.store()}/week`,{query:{week_start:cfg.week()}},'week');
+  const wk=await api('GET',`/stores/${cfg.store()}/dough-sauce/week`,{query:{week_start:cfg.week()}},'week');
   show('week',wk.data); applyWeeks(wk.data?.weeks);
   if(!wk.ok) return;
 
@@ -857,7 +857,7 @@ async function loadJudgements(){
 function pillYN(v,good){ if(v==null||v===undefined) return '<span class="pill mut">—</span>';
   return `<span class="pill ${v===good?'ok':'no'}">${v}</span>`; }
 async function putJudgement(storeKey,stickers,quality){
-  const r=await api('PUT',`/stores/${storeKey}/judgement`,
+  const r=await api('PUT',`/stores/${storeKey}/dough-sauce/judgement`,
     {body:{week_start:cfg.week(),stickers_compliance:stickers,dough_quality:quality}},'judgeput');
   show('judgeput',r.data);
   if(r.ok){ toast('Judgement saved for '+storeKey); loadJudgements(); }
@@ -964,28 +964,28 @@ async function closeRecipe(id){
 function rawPreset(k){
   const store=cfg.store(), date=cfg.date(), week=cfg.week()||'2026-09-22';
   const P={
-    plan:['POST',`/stores/${store}/plan`,{plan_date:date,lines:[
+    plan:['POST',`/stores/${store}/dough-sauce/plan`,{plan_date:date,lines:[
       {ingredient_key:'dough_18oz',buffer_pct:10,planned_qty:681.725},
       {ingredient_key:'dough_10oz',buffer_pct:10,planned_qty:8.7198},
       {ingredient_key:'sauce',buffer_pct:50,planned_qty:13.6969}]}],
-    judge:['PUT',`/stores/${store}/judgement`,
+    judge:['PUT',`/stores/${store}/dough-sauce/judgement`,
       {week_start:week,stickers_compliance:'yes',dough_quality:'pass'}],
     // Wednesday, not Tuesday — the unique key is (store, week_start), so an
     // off-by-one day would open a SECOND judgement for the same week.
-    badweek:['PUT',`/stores/${store}/judgement`,
+    badweek:['PUT',`/stores/${store}/dough-sauce/judgement`,
       {week_start:'2026-09-23',stickers_compliance:'yes'}],
-    badstore:['GET','/stores/99999-99999/plan?date='+date,null],
-    badbuffer:['POST',`/stores/${store}/plan`,{plan_date:date,lines:[
+    badstore:['GET','/stores/99999-99999/dough-sauce/plan?date='+date,null],
+    badbuffer:['POST',`/stores/${store}/dough-sauce/plan`,{plan_date:date,lines:[
       {ingredient_key:'dough_18oz',buffer_pct:500,planned_qty:681.725},
       {ingredient_key:'dough_10oz',buffer_pct:10,planned_qty:8.7198},
       {ingredient_key:'sauce',buffer_pct:50,planned_qty:13.6969}]}],
 
     // Data project. The 4th element picks the origin — without it these go to
     // [audit] and return 404 for a reason that has nothing to do with the request.
-    base:  ['GET',`/stores/${store}/daily-plan?date=${date}`,null,'data'],
+    base:  ['GET',`/stores/${store}/dough-sauce/daily-plan?date=${date}`,null,'data'],
     // "false" spelled out: the exact string that used to return 422 before the
     // request normalised it. It must now come back 200.
-    refund:['GET',`/stores/${store}/daily-plan?date=${date}&include_refunded=false`,null,'data'],
+    refund:['GET',`/stores/${store}/dough-sauce/daily-plan?date=${date}&include_refunded=false`,null,'data'],
     recipe:['POST','/dough-sauce/recipes',
       {item_id:'107788',menu_item_name:'Webberoni',menu_item_account:'Pizza',
        lines:[{ingredient_key:'dough_18oz',qty:1},{ingredient_key:'sauce',qty:1}]},'data'],
