@@ -113,27 +113,30 @@ Route::middleware([
     // Monday and isoWeek() diverges from it on 2026-12-29 — so every read below
     // carries a `weeks` list, and every period parameter is optional and defaults
     // to the current one. The client never has to know a date to ask for a date.
-    Route::prefix('dough-sauce')->group(function () {
+    // A store-scoped route starts with stores/{store_id} and carries no module
+    // prefix in front of it. That is the shape the auth server's rules are written
+    // against — it reads route parameters by name into store_context — so keeping
+    // every store route the same shape means each one needs the ordinary rule
+    // rather than a special case. {store_id} must be spelled exactly that way.
+    Route::get('stores/{store_id}/plan', [DsPlanController::class, 'show'])->name('dough-sauce.plan.show');
+    Route::post('stores/{store_id}/plan', [DsPlanController::class, 'confirm'])->name('dough-sauce.plan.confirm');
 
-        // The daily plan. Store id in the PATH (must be {store_id} — the auth
-        // middleware reads route params by name into store_context).
-        Route::get('stores/{store_id}/plan', [DsPlanController::class, 'show'])->name('dough-sauce.plan.show');
-        Route::post('stores/{store_id}/plan', [DsPlanController::class, 'confirm'])->name('dough-sauce.plan.confirm');
+    // One store's whole accounting week: plans + judgement + the previous weeks'
+    // boundaries the progress figure needs.
+    Route::get('stores/{store_id}/week', [DsPlanController::class, 'week'])->name('dough-sauce.week');
 
-        // All visible stores for a period — the specialist's two screens:
-        //   ?date=        one day  — who has not confirmed
-        //   ?week_start=  one week — the follow-up grid and the report, with the
-        //                            judgements folded in
-        // The week shape is what keeps that grid at one request instead of one
-        // per store.
-        Route::get('plans', [DsPlanController::class, 'index'])->name('dough-sauce.plan.index');
+    // The weekly judgement — 40% of the score, specialist only. Write only;
+    // reads come back with GET /dough-sauce/plans?week_start=.
+    Route::put('stores/{store_id}/judgement', [DsJudgementController::class, 'update'])->name('dough-sauce.judgements.update');
 
-        // One store's whole accounting week: plans + judgement + the previous
-        // weeks' boundaries the progress figure needs.
-        Route::get('stores/{store_id}/week', [DsPlanController::class, 'week'])->name('dough-sauce.week');
-
-        // The weekly judgement — 40% of the score, specialist only. Write only;
-        // reads come back with GET /plans?week_start=.
-        Route::put('stores/{store_id}/judgement', [DsJudgementController::class, 'update'])->name('dough-sauce.judgements.update');
-    });
+    // Not store-scoped — it spans every store the caller can see — so this one
+    // keeps the module prefix.
+    //
+    // The specialist's two screens:
+    //   ?date=        one day  — who has not confirmed
+    //   ?week_start=  one week — the follow-up grid and the report, with the
+    //                            judgements folded in
+    // The week shape is what keeps that grid at one request instead of one per
+    // store.
+    Route::get('dough-sauce/plans', [DsPlanController::class, 'index'])->name('dough-sauce.plan.index');
 });

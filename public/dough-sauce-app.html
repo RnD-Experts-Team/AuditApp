@@ -121,13 +121,18 @@
       <button data-v="judge">Week grid + judge<span class="m">GET·PUT</span></button>
     </div>
 
+    <div class="lbl">Data project</div>
+    <div class="nav">
+      <button data-v="recipes">Recipes<span class="m">CRUD</span></button>
+    </div>
+
     <div class="lbl">Tools</div>
     <div class="nav">
       <button data-v="raw">Raw request<span class="m">ANY</span></button>
     </div>
 
     <div class="foot">
-      5 endpoints · all behind<br>AuthTokenStoreScopeMiddleware.<br><br>
+      12 endpoints · 3 systems<br>all behind AuthTokenStoreScopeMiddleware.<br><br>
       Open via <code>php artisan serve</code><br>→ /dough-sauce-app.html
     </div>
   </aside>
@@ -171,14 +176,14 @@
       <!-- ══════════ DAILY PLAN ══════════ -->
       <section id="v-plan" class="on">
         <div class="note">
-          <b>This is the real flow.</b> The browser calls <code>[data]/dough-sauce/daily-plan</code> for the
+          <b>This is the real flow.</b> The browser calls <code>[data]/stores/{store}/daily-plan</code> for the
           four previous same-weekdays and their <code>base</code>, applies the manager's buffer here, and posts
           only the result to <code>[audit]</code>. Three systems, one screen — exactly what the production
           client does. The <b>Base</b> column stays editable so a figure can be forced when testing.
         </div>
 
         <div class="card">
-          <div class="h"><h3>GET /dough-sauce/stores/{store_id}/plan</h3>
+          <div class="h"><h3>GET /stores/{store_id}/plan</h3>
             <span class="sub">is this day confirmed?</span><div class="spacer"></div>
             <button class="btn sm" onclick="loadPlan()">Send</button></div>
           <div class="reqline" id="rq-plan"><span class="m">GET</span><span class="u">—</span><span class="st st0">idle</span></div>
@@ -187,7 +192,7 @@
         </div>
 
         <div class="card">
-          <div class="h"><h3>POST /dough-sauce/stores/{store_id}/plan</h3>
+          <div class="h"><h3>POST /stores/{store_id}/plan</h3>
             <span class="sub">store manager only · freezes buffer + plan</span></div>
           <div class="b" style="padding:0">
             <table id="planForm"><thead><tr>
@@ -241,7 +246,7 @@
           counts — and must not derive them itself.
         </div>
         <div class="card">
-          <div class="h"><h3>GET /dough-sauce/stores/{store_id}/week</h3><div class="spacer"></div>
+          <div class="h"><h3>GET /stores/{store_id}/week</h3><div class="spacer"></div>
             <button class="btn sm" onclick="loadWeek()">Send</button>
             <button class="btn sm pri" onclick="loadVariance()">⤓ + counts &amp; variance</button></div>
           <div class="reqline" id="rq-week"><span class="m">GET</span><span class="u">—</span><span class="st st0">idle</span></div>
@@ -285,17 +290,88 @@
         </div>
       </section>
 
+      <!-- ══════════ RECIPES (data project) ══════════ -->
+      <section id="v-recipes">
+        <div class="note">
+          <b>The five endpoints on LC_PIZZA_DATA that fix an unmapped item.</b> When the plan screen reports
+          <i>"Webberoni sold 232, no recipe"</i>, this is what the fix button calls. Note what an edit does:
+          it <b>closes the current row and opens a new one</b> — it never overwrites. That is what makes a past
+          week still compute the way it was planned. These are the only endpoints here with no
+          <code>{store_id}</code>: a recipe is the same for all 44 stores.
+        </div>
+
+        <div class="card">
+          <div class="h"><h3>GET /dough-sauce/ingredients</h3><div class="spacer"></div>
+            <button class="btn sm" onclick="loadIngredients()">Send</button></div>
+          <div class="reqline" id="rq-ing"><span class="m">GET</span><span class="u">—</span><span class="st st0">idle</span></div>
+          <div class="b" style="padding:0;border-top:1px solid var(--line)">
+            <table id="ingTable"><thead><tr><th>Key</th><th>Name</th><th>Unit</th>
+              <th class="num">Divisor</th><th>Inventory ref</th></tr></thead><tbody></tbody></table></div>
+          <details class="raw"><summary>Raw response</summary><pre class="json" id="raw-ing">—</pre></details>
+        </div>
+
+        <div class="card">
+          <div class="h"><h3>GET /dough-sauce/recipes</h3><div class="spacer"></div>
+            <input id="recItem" class="inp" style="width:110px" placeholder="item_id">
+            <input id="recAsOf" type="date" class="inp" style="width:150px" title="as_of — which day's recipes were in force">
+            <label style="font-size:12px;display:flex;align-items:center;gap:5px">
+              <input type="checkbox" id="recAll"> all (history)</label>
+            <button class="btn sm" onclick="loadRecipes()">Send</button></div>
+          <div class="reqline" id="rq-rec"><span class="m">GET</span><span class="u">—</span><span class="st st0">idle</span></div>
+          <div class="b" style="padding:0;border-top:1px solid var(--line)">
+            <table id="recTable"><thead><tr><th>#</th><th>Item</th><th>Account</th><th>Ingredient</th>
+              <th class="num">Qty</th><th>From</th><th>To</th><th>Actions</th></tr></thead><tbody></tbody></table></div>
+          <details class="raw"><summary>Raw response</summary><pre class="json" id="raw-rec">—</pre></details>
+        </div>
+
+        <div class="card">
+          <div class="h"><h3>POST /dough-sauce/recipes</h3><div class="spacer"></div>
+            <button class="btn sm pri" onclick="createRecipe()">Create</button></div>
+          <div class="b">
+            <div style="display:flex;gap:9px;flex-wrap:wrap;margin-bottom:9px">
+              <div class="f" style="width:120px"><label>item_id</label><input id="newItemId" class="inp" value="107788"></div>
+              <div class="f" style="flex:1;min-width:170px"><label>menu_item_name</label><input id="newItemName" class="inp" value="Webberoni"></div>
+              <div class="f" style="width:130px"><label>menu_item_account</label><input id="newItemAcct" class="inp" value="Pizza"></div>
+              <div class="f" style="width:150px"><label>effective_from (optional)</label><input id="newFrom" type="date" class="inp"></div>
+            </div>
+            <table id="newLines"><thead><tr><th>Ingredient</th><th class="num">Qty per unit sold</th></tr></thead>
+              <tbody></tbody></table>
+            <div style="font-size:11.5px;color:var(--muted);margin-top:7px">
+              Leave a qty blank to omit that ingredient. The menu item is created if it does not exist yet —
+              which is the point: the items needing a recipe most are the ones nobody catalogued.
+            </div>
+          </div>
+          <div class="reqline" id="rq-recnew"><span class="m">POST</span><span class="u">—</span><span class="st st0">idle</span></div>
+          <details class="raw"><summary>Raw response</summary><pre class="json" id="raw-recnew">—</pre></details>
+        </div>
+
+        <div class="card">
+          <div class="h"><h3>PUT · DELETE /dough-sauce/recipes/{recipe}</h3></div>
+          <div class="b" style="font-size:12.5px;color:var(--muted)">
+            Use the <b>Actions</b> buttons in the recipes table above. <b>Change qty</b> sends
+            <code>PUT {qty, effective_from}</code> — the reply shows you both rows, the one closed and the one
+            opened. <b>Close</b> sends <code>DELETE</code>, which is a soft close: <code>effective_to</code> is
+            set to yesterday and nothing is deleted, so past days keep computing correctly.
+            Both refuse with <code>422</code> on a row that is already closed.
+          </div>
+          <div class="reqline" id="rq-recedit"><span class="m">—</span><span class="u">—</span><span class="st st0">idle</span></div>
+          <details class="raw" open><summary>Raw response</summary><pre class="json" id="raw-recedit">—</pre></details>
+        </div>
+      </section>
+
       <!-- ══════════ RAW ══════════ -->
       <section id="v-raw">
         <div class="note">
           Anything the pages above don't cover — wrong roles, malformed bodies, 404s.
-          The path is appended to the API base URL.
+          Pick the system first; the path is appended to that origin's base URL.
         </div>
         <div class="card">
           <div class="h"><h3>Raw request</h3><div class="spacer"></div>
+            <select id="rawOrigin" class="inp" style="width:120px" title="Which system to send to">
+              <option value="base">[audit]</option><option value="data">[data]</option><option value="inv">[inv]</option></select>
             <select id="rawMethod" class="inp" style="width:100px">
               <option>GET</option><option>POST</option><option>PUT</option><option>DELETE</option></select>
-            <input id="rawPath" class="inp" style="width:380px" value="/dough-sauce/bootstrap">
+            <input id="rawPath" class="inp" style="width:340px" value="/dough-sauce/plans">
             <button class="btn sm pri" onclick="sendRaw()">Send</button></div>
           <div class="b">
             <label style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:650">JSON body (POST/PUT)</label>
@@ -307,6 +383,13 @@
               <button class="btn sm" onclick="rawPreset('badweek')">↳ bad week_start (422)</button>
               <button class="btn sm" onclick="rawPreset('badstore')">↳ unknown store (404)</button>
               <button class="btn sm" onclick="rawPreset('badbuffer')">↳ buffer 500% (422)</button>
+            </div>
+            <div style="display:flex;gap:7px;margin-top:7px;flex-wrap:wrap">
+              <button class="btn sm" onclick="rawPreset('base')">↳ [data] base</button>
+              <button class="btn sm" onclick="rawPreset('refund')">↳ [data] include_refunded=false</button>
+              <button class="btn sm" onclick="rawPreset('recipe')">↳ [data] add recipe</button>
+              <button class="btn sm" onclick="rawPreset('baddup')">↳ [data] duplicate ingredient (422)</button>
+              <button class="btn sm" onclick="rawPreset('counts')">↳ [inv] counts</button>
             </div>
           </div>
           <div class="reqline" id="rq-raw"><span class="m">GET</span><span class="u">—</span><span class="st st0">idle</span></div>
@@ -458,7 +541,8 @@ async function populateWeeks(){
 
 /* ─────────────── nav ─────────────── */
 const TITLES={plan:['Store manager','Daily plan'],plans:['Specialist','All plans'],
-  week:['Specialist','Store week'],judge:['Specialist','Week grid + judgements'],raw:['Tools','Raw request']};
+  week:['Specialist','Store week'],judge:['Specialist','Week grid + judgements'],
+  recipes:['Data project','Recipes'],raw:['Tools','Raw request']};
 let VIEW='plan';
 $$('.nav button').forEach(b=>b.onclick=()=>{
   VIEW=b.dataset.v;
@@ -468,7 +552,8 @@ $$('.nav button').forEach(b=>b.onclick=()=>{
 });
 function reloadView(){
   populateWeeks();
-  ({plan:loadPlan,plans:loadPlans,week:loadWeek,judge:loadJudgements,raw:()=>{}}[VIEW])();
+  ({plan:loadPlan,plans:loadPlans,week:loadWeek,judge:loadJudgements,
+    recipes:loadRecipesView,raw:()=>{}}[VIEW])();
 }
 
 // The ingredient list used to come from /bootstrap. It now belongs where its
@@ -520,7 +605,7 @@ function fillDemoBases(){
 async function loadBase(){
   // Store in the PATH here too — same reason as the inventory route: it is the
   // shape pizzasys' auth_rules are written against in that project.
-  const r=await api('GET',`/dough-sauce/stores/${cfg.store()}/daily-plan`,{
+  const r=await api('GET',`/stores/${cfg.store()}/daily-plan`,{
     origin:cfg.data(),
     query:{date:cfg.date(),lookback:4,include_refunded:'false'},
   },'base');
@@ -552,7 +637,7 @@ async function loadBase(){
       </div>`:'<span class="pill ok">every sold item has a recipe</span>'}`;
 }
 async function loadPlan(){
-  const r=await api('GET',`/dough-sauce/stores/${cfg.store()}/plan`,{query:{date:cfg.date()}},'plan');
+  const r=await api('GET',`/stores/${cfg.store()}/plan`,{query:{date:cfg.date()}},'plan');
   show('plan',r.data);
   applyWeeks(r.data?.data?.weeks);
   if(!r.ok){ $('#planStatus').innerHTML='<span style="color:var(--fail)">'+briefErr(r.data)+'</span>'; return; }
@@ -594,7 +679,7 @@ async function confirmPlan(){
   if(lines.some(l=>isNaN(l.planned_qty)||isNaN(l.buffer_pct))){
     toast('Fill a base and a buffer for all three ingredients (try "Fill demo bases").',true); return;
   }
-  const r=await api('POST',`/dough-sauce/stores/${cfg.store()}/plan`,
+  const r=await api('POST',`/stores/${cfg.store()}/plan`,
     {body:{plan_date:cfg.date(),lines}},'confirm');
   show('confirm',r.data);
   if(r.ok){ toast('Plan confirmed — buffer and quantity are now frozen on these rows.'); loadPlan(); }
@@ -627,7 +712,7 @@ async function loadPlans(){
 /* ─────────────── week ─────────────── */
 async function loadWeek(){
   if(!cfg.week()){ toast('Pick an accounting week (press ↻ Reload to load the list).',true); return; }
-  const r=await api('GET',`/dough-sauce/stores/${cfg.store()}/week`,{query:{week_start:cfg.week()}},'week');
+  const r=await api('GET',`/stores/${cfg.store()}/week`,{query:{week_start:cfg.week()}},'week');
   show('week',r.data);
   applyWeeks(r.data?.weeks);
   if(!r.ok){ $('#weekHead').innerHTML='<span style="color:var(--fail)">'+briefErr(r.data)+'</span>'; return; }
@@ -662,7 +747,7 @@ async function loadWeek(){
 async function loadVariance(){
   if(!cfg.week()){ toast('Pick an accounting week first.',true); return; }
 
-  const wk=await api('GET',`/dough-sauce/stores/${cfg.store()}/week`,{query:{week_start:cfg.week()}},'week');
+  const wk=await api('GET',`/stores/${cfg.store()}/week`,{query:{week_start:cfg.week()}},'week');
   show('week',wk.data); applyWeeks(wk.data?.weeks);
   if(!wk.ok) return;
 
@@ -772,32 +857,146 @@ async function loadJudgements(){
 function pillYN(v,good){ if(v==null||v===undefined) return '<span class="pill mut">—</span>';
   return `<span class="pill ${v===good?'ok':'no'}">${v}</span>`; }
 async function putJudgement(storeKey,stickers,quality){
-  const r=await api('PUT',`/dough-sauce/stores/${storeKey}/judgement`,
+  const r=await api('PUT',`/stores/${storeKey}/judgement`,
     {body:{week_start:cfg.week(),stickers_compliance:stickers,dough_quality:quality}},'judgeput');
   show('judgeput',r.data);
   if(r.ok){ toast('Judgement saved for '+storeKey); loadJudgements(); }
+}
+
+/* ─────────────── recipes (LC_PIZZA_DATA) ───────────────
+   The only endpoints in this tester with no {store_id}: a recipe is the same for
+   all 44 stores, so these keep the module prefix and the store bar above does not
+   apply to them. Everything here goes to [data], never to [audit]. */
+
+async function loadRecipesView(){ await loadIngredients(); await loadRecipes(); }
+
+let INGREDIENTS=[];
+async function loadIngredients(){
+  const r=await api('GET','/dough-sauce/ingredients',{origin:cfg.data()},'ing');
+  show('ing',r.data);
+  const tb=$('#ingTable tbody');
+  if(!r.ok){ tb.innerHTML='<tr><td colspan="5" style="color:var(--fail)">'+briefErr(r.data)+'</td></tr>'; return; }
+  INGREDIENTS=r.data.ingredients||[];
+  tb.innerHTML=INGREDIENTS.map(i=>`<tr>
+    <td><code>${i.key}</code></td><td>${i.name}</td><td>${i.unit}</td>
+    <td class="num">${n(i.divisor,3)}</td>
+    <td style="color:var(--muted)">${i.inventory_ref||'—'}</td></tr>`).join('')
+    || '<tr><td colspan="5" style="color:var(--muted)">None — run the DoughSauceSeeder.</td></tr>';
+  renderNewLines();
+}
+
+// The create form's rows are the ingredient list, so it can never offer a key the
+// server would reject with "Unknown ingredient key".
+function renderNewLines(){
+  $('#newLines tbody').innerHTML=INGREDIENTS.map(i=>`<tr data-k="${i.key}">
+    <td>${i.name} <small style="color:var(--muted)">${i.key}</small></td>
+    <td class="num"><input class="inp num" style="width:110px" type="number" step="0.0001" min="0"
+        id="nl-${i.key}" placeholder="—"></td></tr>`).join('');
+}
+
+async function loadRecipes(){
+  const q={};
+  if($('#recItem').value.trim()) q.item_id=$('#recItem').value.trim();
+  if($('#recAsOf').value)        q.as_of=$('#recAsOf').value;
+  // Sent as the spelled-out word on purpose: the server normalises "true"/"false"
+  // before validating, and this is the exact case that used to return 422.
+  if($('#recAll').checked)       q.all='true';
+
+  const r=await api('GET','/dough-sauce/recipes',{query:q,origin:cfg.data()},'rec');
+  show('rec',r.data);
+  const tb=$('#recTable tbody');
+  if(!r.ok){ tb.innerHTML='<tr><td colspan="8" style="color:var(--fail)">'+briefErr(r.data)+'</td></tr>'; return; }
+  const rows=r.data.recipes||[];
+  tb.innerHTML=rows.map(x=>`<tr>
+    <td style="color:var(--muted)">${x.id}</td>
+    <td><b>${x.menu_item_name||'—'}</b><br><small style="color:var(--muted)">${x.item_id||''}</small></td>
+    <td>${x.menu_item_account||'—'}</td>
+    <td><code>${x.ingredient_key||'—'}</code></td>
+    <td class="num">${n(x.qty,4)}</td>
+    <td>${x.effective_from||'—'}</td>
+    <td>${x.effective_to?'<span class="pill pend">'+x.effective_to+'</span>':'<span class="pill ok">in force</span>'}</td>
+    <td>${x.effective_to ? '<small style="color:var(--muted)">closed</small>' :
+      `<button class="btn sm" onclick="editRecipe(${x.id},${x.qty})">Change qty</button>
+       <button class="btn sm" onclick="closeRecipe(${x.id})">Close</button>`}</td>
+  </tr>`).join('') || '<tr><td colspan="8" style="color:var(--muted)">No recipes for that filter.</td></tr>';
+}
+
+async function createRecipe(){
+  const lines=INGREDIENTS
+    .map(i=>({ingredient_key:i.key,qty:parseFloat($('#nl-'+i.key).value)}))
+    .filter(l=>!isNaN(l.qty)&&l.qty>0);
+
+  if(!lines.length){ toast('Enter at least one quantity — a recipe with no ingredients is not a recipe.',true); return; }
+
+  const body={
+    item_id:           $('#newItemId').value.trim(),
+    menu_item_name:    $('#newItemName').value.trim(),
+    menu_item_account: $('#newItemAcct').value.trim(),
+    lines,
+  };
+  if($('#newFrom').value) body.effective_from=$('#newFrom').value;
+
+  const r=await api('POST','/dough-sauce/recipes',{body,origin:cfg.data()},'recnew');
+  show('recnew',r.data);
+  if(r.ok){ toast('Recipe saved. It now applies from '+(r.data.effective_from||'today')+'.'); loadRecipes(); }
+}
+
+async function editRecipe(id,currentQty){
+  const qty=prompt('New qty (the current row is closed and a new one opened — nothing is overwritten):',currentQty);
+  if(qty===null) return;
+  const from=prompt('effective_from (YYYY-MM-DD) — must be AFTER the current row started.\nBlank = today:','');
+  const body={qty:parseFloat(qty)};
+  if(from&&from.trim()) body.effective_from=from.trim();
+
+  const r=await api('PUT','/dough-sauce/recipes/'+id,{body,origin:cfg.data()},'recedit');
+  show('recedit',r.data);
+  if(r.ok){ toast(`Row ${r.data.closed.id} closed, row ${r.data.opened.id} opened.`); loadRecipes(); }
+}
+
+async function closeRecipe(id){
+  if(!confirm('Close this recipe?\n\nIt is NOT deleted — effective_to is set to yesterday, so every past day still computes with it.')) return;
+  const r=await api('DELETE','/dough-sauce/recipes/'+id,{origin:cfg.data()},'recedit');
+  show('recedit',r.data);
+  if(r.ok){ toast('Closed as of '+r.data.effective_to+'.'); loadRecipes(); }
 }
 
 /* ─────────────── raw ─────────────── */
 function rawPreset(k){
   const store=cfg.store(), date=cfg.date(), week=cfg.week()||'2026-09-22';
   const P={
-    plan:['POST',`/dough-sauce/stores/${store}/plan`,{plan_date:date,lines:[
+    plan:['POST',`/stores/${store}/plan`,{plan_date:date,lines:[
       {ingredient_key:'dough_18oz',buffer_pct:10,planned_qty:681.725},
       {ingredient_key:'dough_10oz',buffer_pct:10,planned_qty:8.7198},
       {ingredient_key:'sauce',buffer_pct:50,planned_qty:13.6969}]}],
-    judge:['PUT',`/dough-sauce/stores/${store}/judgement`,
+    judge:['PUT',`/stores/${store}/judgement`,
       {week_start:week,stickers_compliance:'yes',dough_quality:'pass'}],
     // Wednesday, not Tuesday — the unique key is (store, week_start), so an
     // off-by-one day would open a SECOND judgement for the same week.
-    badweek:['PUT',`/dough-sauce/stores/${store}/judgement`,
+    badweek:['PUT',`/stores/${store}/judgement`,
       {week_start:'2026-09-23',stickers_compliance:'yes'}],
-    badstore:['GET','/dough-sauce/stores/99999-99999/plan?date='+date,null],
-    badbuffer:['POST',`/dough-sauce/stores/${store}/plan`,{plan_date:date,lines:[
+    badstore:['GET','/stores/99999-99999/plan?date='+date,null],
+    badbuffer:['POST',`/stores/${store}/plan`,{plan_date:date,lines:[
       {ingredient_key:'dough_18oz',buffer_pct:500,planned_qty:681.725},
       {ingredient_key:'dough_10oz',buffer_pct:10,planned_qty:8.7198},
       {ingredient_key:'sauce',buffer_pct:50,planned_qty:13.6969}]}],
+
+    // Data project. The 4th element picks the origin — without it these go to
+    // [audit] and return 404 for a reason that has nothing to do with the request.
+    base:  ['GET',`/stores/${store}/daily-plan?date=${date}`,null,'data'],
+    // "false" spelled out: the exact string that used to return 422 before the
+    // request normalised it. It must now come back 200.
+    refund:['GET',`/stores/${store}/daily-plan?date=${date}&include_refunded=false`,null,'data'],
+    recipe:['POST','/dough-sauce/recipes',
+      {item_id:'107788',menu_item_name:'Webberoni',menu_item_account:'Pizza',
+       lines:[{ingredient_key:'dough_18oz',qty:1},{ingredient_key:'sauce',qty:1}]},'data'],
+    // Same ingredient twice — withValidator rejects it (422).
+    baddup:['POST','/dough-sauce/recipes',
+      {item_id:'107788',menu_item_name:'Webberoni',menu_item_account:'Pizza',
+       lines:[{ingredient_key:'sauce',qty:1},{ingredient_key:'sauce',qty:2}]},'data'],
+    counts:['GET',`/inventory/stores/${store}/counts?date_from=${date}&date_to=${date}`
+      +`&ultimatrix_ids=0000,00001,00002`,null,'inv'],
   }[k];
+  $('#rawOrigin').value=P[3]||'base';
   $('#rawMethod').value=P[0]; $('#rawPath').value=P[1];
   $('#rawBody').value=P[2]?JSON.stringify(P[2],null,2):'';
 }
@@ -805,7 +1004,11 @@ async function sendRaw(){
   const m=$('#rawMethod').value, p=$('#rawPath').value.trim();
   let body=null; const t=$('#rawBody').value.trim();
   if(t){ try{ body=JSON.parse(t); }catch(e){ toast('Body is not valid JSON.',true); return; } }
-  const r=await api(m,p,{body},'raw');
+  // Three origins are in play, and a path alone does not say which. Sending
+  // /dough-sauce/recipes to [audit] returns 404, which reads like a routing bug
+  // until you notice it went to the wrong system — hence an explicit picker.
+  const origin={base:cfg.base(),data:cfg.data(),inv:cfg.inv()}[$('#rawOrigin').value];
+  const r=await api(m,p,{body,origin},'raw');
   show('raw',r.data);
 }
 
