@@ -25,10 +25,19 @@ class DsJudgementController extends Controller
 {
     public function update(SaveJudgementRequest $request, string $store_id): JsonResponse
     {
-        $storeId = Store::idFromNumber($store_id);
-        abort_if($storeId === null, 404, 'Store not found.');
+        // The row rather than the id alone: the response carries both the internal
+        // id and the text key, like every other store-scoped response here. The
+        // path value cannot just be echoed — the numeric primary key is accepted
+        // there too, so a caller passing `10` would be told its store is `10`.
+        $store = Store::query()
+            ->where('store', $store_id)
+            ->orWhere('id', is_numeric($store_id) ? (int) $store_id : 0)
+            ->first(['id', 'store']);
 
-        $user = $request->user();
+        abort_if($store === null, 404, 'Store not found.');
+
+        $storeId = (int) $store->id;
+        $user    = $request->user();
 
         
 
@@ -55,6 +64,7 @@ class DsJudgementController extends Controller
         return response()->json([
             'data' => [
                 'store_id'            => $storeId,
+                'store'               => $store->store,
                 'week_start'          => $payload['week_start'],
                 'stickers_compliance' => $judgement->stickers_compliance,
                 'dough_quality'       => $judgement->dough_quality,

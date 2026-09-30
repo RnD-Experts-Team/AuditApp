@@ -37,7 +37,8 @@ class DsPlanController extends Controller
      */
     public function show(Request $request, string $store_id): JsonResponse
     {
-        $storeId = $this->resolveStore($request, $store_id);
+        $store   = $this->resolveStore($request, $store_id);
+        $storeId = (int) $store->id;
 
         $data = $request->validate([
             'date'       => ['nullable', 'date_format:Y-m-d'],
@@ -61,6 +62,12 @@ class DsPlanController extends Controller
         return response()->json([
             'data' => [
                 'store_id'        => $storeId,
+                // The text key too, and in that order: consumers that already
+                // hold a store number — anything driven by a NATS event, for one
+                // — should not have to keep a map from internal ids to match a
+                // response. GET /dough-sauce/plans has always sent both; these
+                // now agree with it.
+                'store'           => $store->store,
                 'plan_date'       => $date,
                 'confirmed'       => $confirmed,
                 'confirmed_at'    => $confirmed ? $first->confirmed_at?->toIso8601String() : null,
@@ -85,7 +92,8 @@ class DsPlanController extends Controller
      */
     public function confirm(ConfirmPlanRequest $request, string $store_id): JsonResponse
     {
-        $storeId = $this->resolveStore($request, $store_id);
+        $store   = $this->resolveStore($request, $store_id);
+        $storeId = (int) $store->id;
         $user    = $request->user();
 
         
@@ -123,6 +131,7 @@ class DsPlanController extends Controller
         return response()->json([
             'data' => [
                 'store_id'     => $storeId,
+                'store'        => $store->store,
                 'plan_date'    => $payload['plan_date'],
                 'confirmed'    => true,
                 'confirmed_at' => $lines->first()?->confirmed_at?->toIso8601String(),
@@ -358,7 +367,8 @@ class DsPlanController extends Controller
      */
     public function week(Request $request, string $store_id): JsonResponse
     {
-        $storeId = $this->resolveStore($request, $store_id);
+        $store   = $this->resolveStore($request, $store_id);
+        $storeId = (int) $store->id;
 
         $data = $request->validate([
             'week_start' => ['nullable', 'date_format:Y-m-d'],
@@ -398,6 +408,7 @@ class DsPlanController extends Controller
 
         return response()->json([
             'store_id' => $storeId,
+            'store'    => $store->store,
             'week'     => [
                 'week_start'     => $resolved['from']->toDateString(),
                 'week_end'       => $resolved['to']->toDateString(),
@@ -504,15 +515,23 @@ class DsPlanController extends Controller
     /**
      * {store_id} in the path is the human store key; resolve it and check the
      * caller may see it at all. Role checks come after, per action.
+     *
+     * Returns the row, not just the id, so every response can carry BOTH the
+     * internal id and the text key. The path value is not good enough to echo
+     * back: idFromNumber also accepts the numeric primary key, so a caller who
+     * passed `10` would be told its store is `10`. The canonical key has to come
+     * from the row, and it costs nothing here — the lookup already happened.
      */
-    private function resolveStore(Request $request, string $storeKey): int
+    private function resolveStore(Request $request, string $storeKey): Store
     {
-        $storeId = Store::idFromNumber($storeKey);
-        abort_if($storeId === null, 404, 'Store not found.');
+        $store = Store::query()
+            ->where('store', $storeKey)
+            ->orWhere('id', is_numeric($storeKey) ? (int) $storeKey : 0)
+            ->first(['id', 'store']);
 
-        
+        abort_if($store === null, 404, 'Store not found.');
 
-        return $storeId;
+        return $store;
     }
 
     /** @return array<int, int> */
