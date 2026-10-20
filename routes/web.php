@@ -27,5 +27,3 @@ use App\Http\Controllers\AuditController;
 //     Route::resource('entities', EntityController::class)->except(['show', 'create', 'edit']);
 //     Route::resource('categories', CategoryController::class)->only(['store', 'update', 'destroy']);
 // });
-
-// require __DIR__ . '/settings.php';

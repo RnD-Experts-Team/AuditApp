@@ -12,12 +12,12 @@
         "php": "^8.2",
         "basis-company/nats": "*",
         "inertiajs/inertia-laravel": "^2.0",
-        "laravel/fortify": "^1.30",
         "laravel/framework": "^12.0",
         "laravel/sanctum": "^4.0",
         "laravel/tinker": "^2.10.1",
         "laravel/wayfinder": "^0.1.9",
         "phpoffice/phpspreadsheet": "*",
+        "predis/predis": "^3.3",
         "scalar/laravel": "*",
         "spatie/laravel-permission": "^6.23"
     },
