@@ -19,7 +19,11 @@ use App\Http\Controllers\Api\EntityController;
 use App\Http\Middleware\AuthTokenStoreScopeMiddleware;
 use Illuminate\Support\Facades\Route;
 
+// Rate limits (AppServiceProvider): `throttle:api` runs ahead of the pizzasys
+// call on every route. The camera-report listing and the exports add their own
+// tier on top.
 Route::middleware([
+    'throttle:api',
     AuthTokenStoreScopeMiddleware::class,
 ])->group(function () {
 
@@ -27,11 +31,11 @@ Route::middleware([
 
     Route::apiResource('camera-forms', CameraFormController::class)->except('update');
     Route::post('camera-forms/{camera_form}', [CameraFormController::class, 'update'])->name('camera-forms.update');
-    Route::get('camera-reports', [CameraReportController::class, 'index']);
-    Route::get('camera-reports/export', [CameraReportController::class, 'export']);
+    Route::get('camera-reports', [CameraReportController::class, 'index'])->middleware('throttle:api-heavy');
+    Route::get('camera-reports/export', [CameraReportController::class, 'export'])->middleware('throttle:api-export');
     // ================================= export functions ==============================
-    Route::get('camera-reports/exportExcel', [CameraReportController::class, 'exportExcel'])->name('camera-reports.exportExcel');
-    Route::get('camera-reports/exportImages', [CameraReportController::class, 'exportImages'])->name('camera-reports.exportImages');
+    Route::get('camera-reports/exportExcel', [CameraReportController::class, 'exportExcel'])->middleware('throttle:api-export')->name('camera-reports.exportExcel');
+    Route::get('camera-reports/exportImages', [CameraReportController::class, 'exportImages'])->middleware('throttle:api-export')->name('camera-reports.exportImages');
 
     // ================================= Custom Reports ==============================
     Route::apiResource('custom-reports', CustomReportController::class);
@@ -97,7 +101,7 @@ Route::middleware([
         Route::delete('inspection-items/{inspection_item}', [InspectionItemController::class, 'destroy'])->name('cleaning.items.destroy');
 
         // Reports
-        Route::get('reports/csv', [CleaningReportController::class, 'csv'])->name('cleaning.reports.csv');
+        Route::get('reports/csv', [CleaningReportController::class, 'csv'])->middleware('throttle:api-export')->name('cleaning.reports.csv');
         Route::get('reports/data', [CleaningReportController::class, 'data'])->name('cleaning.reports.data');
     });
 
