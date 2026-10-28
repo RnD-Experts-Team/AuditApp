@@ -49,6 +49,11 @@ Route::middleware([
 
     // ================================= Cleaning Chart =============================
     Route::prefix('cleaning')->group(function () {
+        // Unified calendar feed (cleaning + dough). Stores are in the query
+        // (stores=a,b): the pizzasys rule must read store_id_sources.query
+        // ["stores"] with policy "all".
+        Route::get('calendar/feed', \App\Http\Controllers\Api\CalendarFeedController::class)->name('cleaning.calendar.feed');
+
         // Track 1 — Tasks (auditor/super create; list/show)
         Route::get('tasks', [CleaningTaskController::class, 'index'])->name('cleaning.tasks.index');
         Route::post('tasks', [CleaningTaskController::class, 'store'])->name('cleaning.tasks.store');
