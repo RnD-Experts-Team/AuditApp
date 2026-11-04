@@ -16,7 +16,9 @@ use App\Http\Controllers\Api\CustomReportController;
 use App\Http\Controllers\Api\DoughSauce\DsJudgementController;
 use App\Http\Controllers\Api\DoughSauce\DsPlanController;
 use App\Http\Controllers\Api\EntityController;
+use App\Http\Controllers\Api\ReportDatasetController;
 use App\Http\Middleware\AuthTokenStoreScopeMiddleware;
+use App\Reports\ReportDatasets;
 use Illuminate\Support\Facades\Route;
 
 // Rate limits (AppServiceProvider): `throttle:api` runs ahead of the pizzasys
@@ -28,6 +30,16 @@ Route::middleware([
 ])->group(function () {
 
     Route::get('/audits/ratings-summary/{store_id}/{date_start}/{date_end}', [AuditController::class, 'ratingsSummary']);
+
+    // The report dataset contract, the same in every service: the catalog, and one
+    // literal query route per dataset (never a {key} parameter), so each dataset
+    // has its own pizzasys auth rule. The body's `stores` are store codes
+    // (stores.store); the group's throttle:api still applies on top of api-heavy.
+    Route::get('report-datasets', [ReportDatasetController::class, 'catalog']);
+    foreach (ReportDatasets::DATASETS as $dataset) {
+        Route::post('report-datasets/'.$dataset::KEY.'/query', [ReportDatasetController::class, 'query'])
+            ->defaults('dataset', $dataset::KEY)->middleware('throttle:api-heavy');
+    }
 
     Route::apiResource('camera-forms', CameraFormController::class)->except('update');
     Route::post('camera-forms/{camera_form}', [CameraFormController::class, 'update'])->name('camera-forms.update');
@@ -53,6 +65,11 @@ Route::middleware([
 
     // ================================= Cleaning Chart =============================
     Route::prefix('cleaning')->group(function () {
+        // Unified calendar feed (cleaning + dough). Stores are in the query
+        // (stores=a,b): the pizzasys rule must read store_id_sources.query
+        // ["stores"] with policy "all".
+        Route::get('calendar/feed', \App\Http\Controllers\Api\CalendarFeedController::class)->name('cleaning.calendar.feed');
+
         // Track 1 — Tasks (auditor/super create; list/show)
         Route::get('tasks', [CleaningTaskController::class, 'index'])->name('cleaning.tasks.index');
         Route::post('tasks', [CleaningTaskController::class, 'store'])->name('cleaning.tasks.store');
